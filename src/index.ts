@@ -10,9 +10,9 @@
 // node. The only browser-dependent pieces are PlayerController.bindInput and
 // loadSettings/saveSettings — call those from a DOM environment or not at all.
 
-export * from './math/vec3';
-export * from './constants';
-export * from './physics/MovementPhysics';
-export * from './physics/Collision';
-export * from './settings';
-export * from './player/PlayerController';
+export * from './math/vec3.js';
+export * from './constants.js';
+export * from './physics/MovementPhysics.js';
+export * from './physics/Collision.js';
+export * from './settings.js';
+export * from './player/PlayerController.js';
