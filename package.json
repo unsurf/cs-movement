@@ -1,0 +1,30 @@
+{
+  "name": "@unsurf/cs-movement",
+  "version": "0.1.0",
+  "description": "Counter-Strike / Source-engine movement physics: bhop, surf, air-strafing, ladders, and plane-based brush collision. Renderer-agnostic, zero runtime dependencies.",
+  "keywords": ["counter-strike", "source-engine", "movement", "surf", "bhop", "quake", "physics", "collision"],
+  "license": "Apache-2.0",
+  "author": "Liam Grant",
+  "repository": { "type": "git", "url": "git+https://github.com/unsurf/cs-movement.git" },
+  "homepage": "https://github.com/unsurf/cs-movement#readme",
+  "bugs": "https://github.com/unsurf/cs-movement/issues",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2",
+    "vitest": "^3.0.5"
+  },
+  "engines": { "node": ">=18" }
+}
