@@ -10,8 +10,8 @@
 // (same scheme as Source's engine trace / Quake 2's CM_ClipBoxToBrush).
 // Pure module — no Three.js imports — so it runs under Vitest in node.
 
-import { DIST_EPSILON } from '../constants';
-import { type Vec3, vec3, clone, dot } from '../math/vec3';
+import { DIST_EPSILON } from '../constants.js';
+import { type Vec3, vec3, clone, dot } from '../math/vec3.js';
 
 export interface Plane {
   normal: Vec3; // outward-facing unit normal

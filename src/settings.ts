@@ -4,7 +4,7 @@
  * Copyright 2026 Liam Grant
  * SPDX-License-Identifier: Apache-2.0
  */
-import { AIR_ACCELERATE, CROUCH_SPEED, DEFAULT_TICK_RATE, M_YAW, RUN_SPEED, WALK_SPEED } from './constants';
+import { AIR_ACCELERATE, CROUCH_SPEED, DEFAULT_TICK_RATE, M_YAW, RUN_SPEED, WALK_SPEED } from './constants.js';
 
 export interface CrosshairSettings {
   color: string;

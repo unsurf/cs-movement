@@ -13,8 +13,8 @@
 //   airAccelerate  -> CGameMovement::AirAccelerate
 //   clipVelocity   -> CGameMovement::ClipVelocity
 
-import { AIR_SPEED_CAP } from '../constants';
-import type { Vec3 } from '../math/vec3';
+import { AIR_SPEED_CAP } from '../constants.js';
+import type { Vec3 } from '../math/vec3.js';
 
 /**
  * Ground friction. Only horizontal components bleed speed (y is vertical and

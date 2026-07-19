@@ -31,7 +31,7 @@ import {
   STANDABLE_NORMAL,
   STEP_HEIGHT,
   STOP_SPEED,
-} from '../constants';
+} from '../constants.js';
 import {
   type Vec3,
   addScaled,
@@ -46,10 +46,10 @@ import {
   scale,
   set,
   vec3,
-} from '../math/vec3';
-import { accelerate, airAccelerate, applyFriction, clipVelocity } from '../physics/MovementPhysics';
-import type { LadderVolume, World } from '../physics/Collision';
-import type { Settings } from '../settings';
+} from '../math/vec3.js';
+import { accelerate, airAccelerate, applyFriction, clipVelocity } from '../physics/MovementPhysics.js';
+import type { LadderVolume, World } from '../physics/Collision.js';
+import type { Settings } from '../settings.js';
 
 /** Optional host hooks. Movement never logs or touches globals on its own. */
 export interface PlayerOptions {
