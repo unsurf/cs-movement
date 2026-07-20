@@ -57,7 +57,7 @@ describe('perf bonus (opt-in, disabled by default)', () => {
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2 },
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2, autobhopChance: 0.42 },
     });
     expect(delayedRejump(settings, 0).quality).toBe('perfect');
     expect(delayedRejump(settings, 2).quality).toBe('grey');
@@ -68,7 +68,7 @@ describe('perf bonus (opt-in, disabled by default)', () => {
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2 },
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2, autobhopChance: 0.42 },
     });
     const perfect = delayedRejump(settings, 0);
     const grey = delayedRejump(settings, 2);
@@ -77,5 +77,85 @@ describe('perf bonus (opt-in, disabled by default)', () => {
     expect(perfect.ratio).toBeCloseTo(1.2, 2); // full bonusFactor, no air-accel noise possible here
     expect(perfect.ratio).toBeGreaterThan(grey.ratio);
     expect(grey.ratio).toBeGreaterThan(normal.ratio);
+  });
+});
+
+describe('perf bonus under autobhop: chance-based instead of guaranteed', () => {
+  it('defaults autobhopChance to 0.42', () => {
+    expect(DEFAULT_SETTINGS.perf.autobhopChance).toBe(0.42);
+  });
+
+  it('rolls perfect/bonus when the injected rng lands under the chance, normal otherwise', () => {
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2, autobhopChance: 0.42 },
+    });
+
+    const hits = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.1 });
+    hits.input.forward = true;
+    run(hits, 64);
+    hits.input.jump = true;
+    run(hits, 1);
+    expect(hits.lastHopQuality).toBe('perfect');
+
+    const misses = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.9 });
+    misses.input.forward = true;
+    run(misses, 64);
+    misses.input.jump = true;
+    run(misses, 1);
+    expect(misses.lastHopQuality).toBe('normal');
+  });
+
+  it('applies the takeoff-speed bonus only on the perfect roll, never on the missed roll', () => {
+    const settings = makeSettings({
+      autobhop: true,
+      bhopSpeedClamp: false,
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.3, autobhopChance: 0.42 },
+    });
+
+    function speedRatio(rng: () => number): number {
+      const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng });
+      player.input.forward = true;
+      run(player, 64);
+      const before = player.horizontalSpeed;
+      player.input.jump = true;
+      run(player, 1);
+      return player.horizontalSpeed / before;
+    }
+
+    expect(speedRatio(() => 0.1)).toBeCloseTo(1.3, 2);
+    expect(speedRatio(() => 0.9)).toBeCloseTo(1.0, 2);
+  });
+
+  it('over many jumps, the perfect rate roughly tracks autobhopChance', () => {
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.1, autobhopChance: 0.42 },
+    });
+    let call = 0;
+    // A simple deterministic sequence covering [0,1) evenly, standing in for Math.random.
+    const rng = () => {
+      call++;
+      return (call * 0.6180339887) % 1;
+    };
+    // Jumping in place (no forward hold) -- 500 hop cycles at ~0.76s of
+    // hangtime each is ~380s of simulated time, more than enough at a
+    // sustained 275 u/s to walk off the edge of this test world's finite
+    // floor (+-8192) if forward were held the whole time.
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng });
+    run(player, 64);
+
+    let perfectCount = 0;
+    const trials = 500;
+    for (let i = 0; i < trials; i++) {
+      player.input.jump = false;
+      while (!player.onGround) run(player, 1); // ride the arc back down first
+      player.input.jump = true;
+      run(player, 1); // the hop under test
+      if (player.lastHopQuality === 'perfect') perfectCount++;
+    }
+    const rate = perfectCount / trials;
+    expect(rate).toBeGreaterThan(0.35);
+    expect(rate).toBeLessThan(0.49);
   });
 });
