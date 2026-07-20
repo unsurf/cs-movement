@@ -16,6 +16,38 @@ export interface CrosshairSettings {
   tStyle: boolean; // no top arm
 }
 
+/**
+ * CS2-style stamina pool: jumping and landing add fractions of `max`; it
+ * recovers over time; while full-ish, both max ground speed and jump
+ * velocity are throttled. Valve hasn't published the exact formula this is
+ * based on (sv_staminajumpcost / sv_staminalandcost / sv_staminamax), so
+ * these are a tunable approximation, not verified game-accurate values.
+ * Disabled by default — every existing preset (including "perf" bhop
+ * modes) plays with this off, matching servers that zero the costs out.
+ */
+export interface StaminaSettings {
+  enabled: boolean;
+  max: number;
+  jumpCost: number; // fraction of max added per jump
+  landCost: number; // fraction of max added per landing
+  recoveryRate: number; // fraction of max recovered per second
+  maxPenalty: number; // fraction (0..1): speed/jump-velocity cut at a full pool
+}
+
+/**
+ * Manual-timing bhop bonus, independent of autobhop: a takeoff within
+ * `greyWindowTicks` of the earliest possible rejump (the tick right after
+ * landing) gets an extra takeoff-speed multiplier that falls off linearly
+ * from `bonusFactor` at 0 ticks late to 0 at the window edge. This rewards
+ * manual timing on top of the vanilla effect (skipping a tick of ground
+ * friction), it doesn't replace it.
+ */
+export interface PerfSettings {
+  enabled: boolean;
+  greyWindowTicks: number;
+  bonusFactor: number;
+}
+
 export interface Settings {
   sensitivity: number;
   mYaw: number; // deg per mouse count, CS:GO's m_yaw/m_pitch
@@ -33,6 +65,8 @@ export interface Settings {
   showDebug: boolean;
   viewPunch: boolean;
   crosshair: CrosshairSettings;
+  stamina: StaminaSettings;
+  perf: PerfSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -59,6 +93,19 @@ export const DEFAULT_SETTINGS: Settings = {
     dot: false,
     tStyle: false,
   },
+  stamina: {
+    enabled: false,
+    max: 1,
+    jumpCost: 0.08,
+    landCost: 0.05,
+    recoveryRate: 0.5,
+    maxPenalty: 0.4,
+  },
+  perf: {
+    enabled: false,
+    greyWindowTicks: 4,
+    bonusFactor: 0.05,
+  },
 };
 
 // v2: defaults moved to nopre-KZ tuning (airaccelerate 100, takeoff clamp).
@@ -73,6 +120,8 @@ export function loadSettings(): Settings {
       ...structuredClone(DEFAULT_SETTINGS),
       ...parsed,
       crosshair: { ...DEFAULT_SETTINGS.crosshair, ...(parsed.crosshair ?? {}) },
+      stamina: { ...DEFAULT_SETTINGS.stamina, ...(parsed.stamina ?? {}) },
+      perf: { ...DEFAULT_SETTINGS.perf, ...(parsed.perf ?? {}) },
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
