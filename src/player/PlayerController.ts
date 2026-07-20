@@ -64,6 +64,8 @@ import type { Settings } from '../settings.js';
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
   log?: (msg: string) => void;
+  /** Source for the autobhop perf-chance roll. Default: Math.random. Inject for deterministic tests. */
+  rng?: () => number;
 }
 
 const DEG2RAD = Math.PI / 180;
@@ -135,6 +137,7 @@ export class PlayerController {
   private readonly tickHistory: string[] = [];
   /** Host-supplied anomaly sink; no-op unless the embedder passes one. */
   private readonly log: (msg: string) => void;
+  private readonly rng: () => number;
   private contactsThisTick: string[] = [];
   private readonly spawn: Vec3;
 
@@ -151,6 +154,7 @@ export class PlayerController {
     opts: PlayerOptions = {},
   ) {
     this.log = opts.log ?? (() => {});
+    this.rng = opts.rng ?? Math.random;
     this.spawn = clone(spawn);
     this.origin = clone(spawn);
     this.prevPos = clone(spawn);
@@ -470,12 +474,22 @@ export class PlayerController {
     }
 
     if (this.settings.perf.enabled) {
-      const bonus = perfBonusFactor(
-        this.groundTicksSinceLanding,
-        this.settings.perf.greyWindowTicks,
-        this.settings.perf.bonusFactor,
-      );
-      this.lastHopQuality = this.groundTicksSinceLanding <= 0 ? 'perfect' : bonus > 0 ? 'grey' : 'normal';
+      let bonus: number;
+      if (this.settings.autobhop) {
+        // Autobhop always re-fires on the earliest possible tick, so the
+        // tick-based classification below would always read 'perfect' — a
+        // guaranteed buff, not a bonus. Roll a chance instead.
+        const isPerfect = this.rng() < this.settings.perf.autobhopChance;
+        this.lastHopQuality = isPerfect ? 'perfect' : 'normal';
+        bonus = isPerfect ? this.settings.perf.bonusFactor : 0;
+      } else {
+        bonus = perfBonusFactor(
+          this.groundTicksSinceLanding,
+          this.settings.perf.greyWindowTicks,
+          this.settings.perf.bonusFactor,
+        );
+        this.lastHopQuality = this.groundTicksSinceLanding <= 0 ? 'perfect' : bonus > 0 ? 'grey' : 'normal';
+      }
       if (bonus > 0) {
         this.velocity.x *= 1 + bonus;
         this.velocity.z *= 1 + bonus;
