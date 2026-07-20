@@ -47,7 +47,16 @@ import {
   set,
   vec3,
 } from '../math/vec3.js';
-import { accelerate, airAccelerate, applyFriction, clipVelocity } from '../physics/MovementPhysics.js';
+import {
+  accelerate,
+  addStamina,
+  airAccelerate,
+  applyFriction,
+  clipVelocity,
+  perfBonusFactor,
+  recoverStamina,
+  staminaPenaltyMultiplier,
+} from '../physics/MovementPhysics.js';
 import type { LadderVolume, World } from '../physics/Collision.js';
 import type { Settings } from '../settings.js';
 
@@ -98,6 +107,11 @@ export class PlayerController {
 
   landPunch = 0; // downward view offset from landing, decays each tick
 
+  /** 0..settings.stamina.max; only meaningful while settings.stamina.enabled. */
+  stamina = 0;
+  /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
+  lastHopQuality: 'perfect' | 'grey' | 'normal' | null = null;
+
   readonly input: InputState = {
     forward: false,
     back: false,
@@ -112,6 +126,7 @@ export class PlayerController {
   private oldJump = false; // was +jump held last tick (Source's pogo-stick check)
   private ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
   private fallVelocity = 0;
+  private groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
   private stuckTicks = 0;
   private blockedTicks = 0;
 
@@ -241,6 +256,9 @@ export class PlayerController {
     this.onGround = false;
     this.onLadder = null;
     this.ducked = false;
+    this.stamina = 0;
+    this.groundTicksSinceLanding = 0;
+    this.lastHopQuality = null;
   }
 
   // -- Simulation -----------------------------------------------------------
@@ -256,6 +274,9 @@ export class PlayerController {
 
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
     this.updateDuck();
+    if (this.settings.stamina.enabled) {
+      this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, this.settings.stamina.max, dt);
+    }
 
     if (!this.checkStuck()) {
       const ladder = this.checkLadder();
@@ -266,6 +287,7 @@ export class PlayerController {
         this.checkJump();
         if (this.onGround) {
           this.walkMove(dt);
+          this.groundTicksSinceLanding++;
         } else {
           this.fallVelocity = -this.velocity.y;
           this.airMove(dt);
@@ -401,9 +423,15 @@ export class PlayerController {
   }
 
   private currentMaxSpeed(): number {
-    if (this.ducked) return this.settings.crouchSpeed;
-    if (this.input.walk) return this.settings.walkSpeed;
-    return this.settings.runSpeed;
+    let speed: number;
+    if (this.ducked) speed = this.settings.crouchSpeed;
+    else if (this.input.walk) speed = this.settings.walkSpeed;
+    else speed = this.settings.runSpeed;
+
+    if (this.settings.stamina.enabled) {
+      speed *= staminaPenaltyMultiplier(this.stamina, this.settings.stamina.max, this.settings.stamina.maxPenalty);
+    }
+    return speed;
   }
 
   /** Horizontal wish direction from WASD + yaw. Returns wishspeed. */
@@ -441,7 +469,25 @@ export class PlayerController {
       }
     }
 
-    this.velocity.y = JUMP_VELOCITY;
+    if (this.settings.perf.enabled) {
+      const bonus = perfBonusFactor(
+        this.groundTicksSinceLanding,
+        this.settings.perf.greyWindowTicks,
+        this.settings.perf.bonusFactor,
+      );
+      this.lastHopQuality = this.groundTicksSinceLanding <= 0 ? 'perfect' : bonus > 0 ? 'grey' : 'normal';
+      if (bonus > 0) {
+        this.velocity.x *= 1 + bonus;
+        this.velocity.z *= 1 + bonus;
+      }
+    }
+
+    let jumpVelocity = JUMP_VELOCITY;
+    if (this.settings.stamina.enabled) {
+      jumpVelocity *= staminaPenaltyMultiplier(this.stamina, this.settings.stamina.max, this.settings.stamina.maxPenalty);
+      this.stamina = addStamina(this.stamina, this.settings.stamina.jumpCost, this.settings.stamina.max);
+    }
+    this.velocity.y = jumpVelocity;
     this.onGround = false;
   }
 
@@ -664,8 +710,14 @@ export class PlayerController {
       this.onGround = true;
       copy(this.groundNormal, tr.normal);
       copy(this.origin, tr.endPos);
-      if (wasAirborne && this.settings.viewPunch && this.fallVelocity > 250) {
-        this.landPunch = Math.min((this.fallVelocity - 250) * 0.012, 10);
+      if (wasAirborne) {
+        this.groundTicksSinceLanding = 0;
+        if (this.settings.stamina.enabled) {
+          this.stamina = addStamina(this.stamina, this.settings.stamina.landCost, this.settings.stamina.max);
+        }
+        if (this.settings.viewPunch && this.fallVelocity > 250) {
+          this.landPunch = Math.min((this.fallVelocity - 250) * 0.012, 10);
+        }
       }
       this.fallVelocity = 0;
     } else {
