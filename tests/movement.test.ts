@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { GRAVITY, JUMP_VELOCITY } from '../src/constants';
 import { vec3, length } from '../src/math/vec3';
-import { accelerate, airAccelerate, applyFriction, clipVelocity } from '../src/physics/MovementPhysics';
+import {
+  accelerate,
+  addStamina,
+  airAccelerate,
+  applyFriction,
+  clipVelocity,
+  perfBonusFactor,
+  recoverStamina,
+  staminaPenaltyMultiplier,
+} from '../src/physics/MovementPhysics';
 
 const DT = 1 / 128;
 const S = Math.SQRT1_2;
@@ -110,5 +119,37 @@ describe('jump + gravity integration', () => {
     }
     expect(maxY).toBeGreaterThan(56);
     expect(maxY).toBeLessThan(57.5);
+  });
+});
+
+describe('stamina helpers', () => {
+  it('addStamina clamps to max', () => {
+    expect(addStamina(0.9, 0.3, 1)).toBe(1);
+    expect(addStamina(0.2, 0.3, 1)).toBeCloseTo(0.5, 10);
+  });
+
+  it('recoverStamina decays toward 0 and clamps there', () => {
+    expect(recoverStamina(1, 0.5, 1, 1)).toBeCloseTo(0.5, 10);
+    expect(recoverStamina(0.1, 0.5, 1, 1)).toBe(0);
+  });
+
+  it('staminaPenaltyMultiplier is 1 at empty and 1 - maxPenalty at full', () => {
+    expect(staminaPenaltyMultiplier(0, 1, 0.4)).toBe(1);
+    expect(staminaPenaltyMultiplier(1, 1, 0.4)).toBeCloseTo(0.6, 10);
+    expect(staminaPenaltyMultiplier(0.5, 1, 0.4)).toBeCloseTo(0.8, 10);
+  });
+});
+
+describe('perfBonusFactor', () => {
+  it('gives the full bonus at 0 ticks late, tapering to 0 at the window edge', () => {
+    expect(perfBonusFactor(0, 4, 0.2)).toBe(0.2);
+    expect(perfBonusFactor(2, 4, 0.2)).toBeCloseTo(0.1, 10);
+    expect(perfBonusFactor(4, 4, 0.2)).toBe(0);
+    expect(perfBonusFactor(10, 4, 0.2)).toBe(0);
+  });
+
+  it('a zero-width window only rewards a 0-tick takeoff', () => {
+    expect(perfBonusFactor(0, 0, 0.2)).toBe(0.2);
+    expect(perfBonusFactor(1, 0, 0.2)).toBe(0);
   });
 });
