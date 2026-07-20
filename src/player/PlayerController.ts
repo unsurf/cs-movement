@@ -217,6 +217,11 @@ export class PlayerController {
       const spikeY = Math.abs(dy) > 350 && Math.abs(dy) > 8 * Math.abs(lastDy) + 100;
       if (spikeX || spikeY || Math.abs(dx) > 1200 || Math.abs(dy) > 1200) {
         this.log(`mouse snap filtered (dx ${dx}, dy ${dy})`);
+        // Still update the baseline so a fast-but-legitimate turn only
+        // loses this one frame, instead of every subsequent frame being
+        // compared against a stale small lastDx/lastDy and re-triggering.
+        lastDx = dx;
+        lastDy = dy;
         return;
       }
       lastDx = dx;
