@@ -25,8 +25,16 @@ export interface Settings {
   fov: number; // horizontal FOV in CS:GO 4:3 terms
   tickRate: number;
   autobhop: boolean;
-  /** sv_enablebunnyhopping 0 — clamp takeoff speed to 1.1 × maxspeed (nopre). */
+  /** sv_enablebunnyhopping 0 — clamp takeoff speed to 1.1 × maxspeed. */
   bhopSpeedClamp: boolean;
+  /**
+   * "nopre": stops angled air-strafing from adding speed beyond the
+   * player's current ground max speed. Only caps NEW gains from
+   * air-strafe accel — speed the player already has (a bhop chain with
+   * bhopSpeedClamp off, a perf-bonus takeoff, ...) is left alone, so this
+   * composes with those instead of silently overriding them.
+   */
+  noPrestrafe: boolean;
   airAccelerate: number;
   runSpeed: number;
   walkSpeed: number;

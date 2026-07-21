@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tickRate: DEFAULT_TICK_RATE,
   autobhop: true,
   bhopSpeedClamp: true,
+  noPrestrafe: true,
   airAccelerate: AIR_ACCELERATE,
   runSpeed: RUN_SPEED,
   walkSpeed: WALK_SPEED,

@@ -62,8 +62,11 @@ describe('PlayerController', () => {
     expect(croucher.horizontalSpeed).toBeCloseTo(85, 0);
   });
 
-  it('nopre clamp holds autobhop cruising speed near 1.1 × maxspeed', () => {
-    const player = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+  it('bhop speed clamp holds autobhop cruising speed near 1.1 × maxspeed', () => {
+    // noPrestrafe is exercised separately (AirMove.test.ts); disabled here so
+    // this test isolates bhopSpeedClamp's own takeoff-clamp + air-strafe
+    // interaction, same as before that setting existed.
+    const player = new PlayerController(makeWorld(), makeSettings({ noPrestrafe: false }), vec3(0, 5, 0));
     player.input.forward = true;
     run(player, 128);
     player.input.forward = false;
@@ -83,7 +86,7 @@ describe('PlayerController', () => {
   it('gains speed without bound when the clamp is disabled', () => {
     const player = new PlayerController(
       makeWorld(),
-      makeSettings({ bhopSpeedClamp: false }),
+      makeSettings({ bhopSpeedClamp: false, noPrestrafe: false }),
       vec3(0, 5, 0),
     );
     player.input.forward = true;

@@ -17,7 +17,7 @@ export function checkJump(ctx: MovementContext): void {
   // from mid-air does nothing on landing. Autobhop skips that check.
   if (!ctx.settings.autobhop && ctx.oldJump) return;
 
-  // sv_enablebunnyhopping 0 / nopre: clamp takeoff speed to 1.1 × maxspeed
+  // sv_enablebunnyhopping 0: clamp takeoff speed to 1.1 × maxspeed
   // (Source's PreventBunnyJumping), so hops don't compound speed.
   if (ctx.settings.bhopSpeedClamp) {
     const maxScaled = currentMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;

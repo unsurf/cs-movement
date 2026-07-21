@@ -163,7 +163,8 @@ const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a br
 | `fov` | `90` | Horizontal FOV, CS:GO 4:3 terms (render-only; the sim doesn't use it) |
 | `tickRate` | `128` | Advisory — you choose the actual `dt` passed to `tick()` |
 | `autobhop` | `true` | `sv_autobunnyhopping 1` — holding jump keeps hopping |
-| `bhopSpeedClamp` | `true` | `sv_enablebunnyhopping 0` ("nopre") — clamps takeoff speed to 1.1× maxspeed so hops can't compound speed. Set `false` for uncapped CS:GO-style bhop |
+| `bhopSpeedClamp` | `true` | `sv_enablebunnyhopping 0` — clamps takeoff speed to 1.1× maxspeed so hops can't compound speed. Set `false` for uncapped CS:GO-style bhop |
+| `noPrestrafe` | `true` | "nopre" — stops angled air-strafing from adding speed beyond the current ground max speed. Doesn't touch speed you already have from a takeoff bonus or an uncapped bhop chain, and doesn't affect surfing |
 | `airAccelerate` | `100` | `sv_airaccelerate` — this default is KZ/HNS-server tuned; CS:GO's default is `12` |
 | `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Flat max speeds, not percentages |
 | `showSpeed` / `showFps` / `showDebug` | `true` | HUD toggles — informational only, the sim ignores them |
@@ -180,9 +181,27 @@ UI against them).
 
 | `autobhop` | `bhopSpeedClamp` | Behavior |
 | --- | --- | --- |
-| `true` | `true` (default) | Holding jump re-hops every tick you're grounded; takeoff speed capped at 1.1× maxspeed — the "nopre" KZ/HNS feel |
+| `true` | `true` (default) | Holding jump re-hops every tick you're grounded; takeoff speed capped at 1.1× maxspeed — the KZ/HNS feel |
 | `true` | `false` | Same auto-rehop, but no takeoff clamp — speed compounds without bound, pure CS:GO pre-nerf bhop |
 | `false` | either | Vanilla: a jump only fires if `+jump` was *not* already held last tick (Source's pogo-stick rule) |
+
+### No Prestrafe ("nopre")
+
+`bhopSpeedClamp` only clamps speed at the instant of a ground→air takeoff.
+It says nothing about what happens *while airborne* — and Source's air-strafe
+formula deliberately has no cap on the resulting velocity (see
+`airAccelerate` above), which is exactly what lets angled air-strafing gain
+speed beyond your run speed before you've ever landed (the "prestrafe"
+technique) or between bhop hops.
+
+`noPrestrafe: true` (the default) closes that specific gap: it stops
+air-strafing from adding *new* speed past your current ground max speed.
+It's careful about what it doesn't touch, though — it never claws back
+speed you already have from somewhere else (a `bhopSpeedClamp: false`
+chain, a `perf` takeoff bonus), so it composes with those instead of
+silently overriding them, and it's exempt while `player.surfing` is true —
+riding a ramp is expected to exceed run speed; that's the whole point of
+surf.
 
 ### Perf bonus — manual-timing reward
 
