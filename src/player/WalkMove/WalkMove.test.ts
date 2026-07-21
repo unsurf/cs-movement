@@ -52,4 +52,27 @@ describe('noPrestrafe on the ground', () => {
       expect(peak).toBeLessThanOrEqual(DEFAULT_SETTINGS.runSpeed + 0.01);
     }
   });
+
+  it('caps landing speed to ground max, but air-strafe gain to get there is untouched', () => {
+    // Build genuine airborne speed via prestrafe (AirMove is never capped),
+    // then land on flat ground and confirm walkMove brings it straight down
+    // to run speed instead of preserving it as a permanent ground sprint.
+    const settings = makeSettings({ noPrestrafe: true });
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 3000, 0));
+    player.input.right = true;
+    let peakAirborne = 0;
+    for (let i = 0; i < 512 && !player.onGround; i++) {
+      player.yaw -= 3;
+      player.tick(DT);
+      peakAirborne = Math.max(peakAirborne, player.horizontalSpeed);
+    }
+    expect(peakAirborne).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // real prestrafe gain happened
+    expect(player.onGround).toBe(true);
+    // categorizePosition only flips onGround at the END of the landing
+    // tick — walkMove doesn't run on that tick, so give it a couple more
+    // to actually execute and apply the cap.
+    player.tick(DT);
+    player.tick(DT);
+    expect(player.horizontalSpeed).toBeLessThanOrEqual(DEFAULT_SETTINGS.runSpeed + 0.01);
+  });
 });

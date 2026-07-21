@@ -20,21 +20,21 @@ export function walkMove(ctx: MovementContext, dt: number): void {
   applyFriction(ctx.velocity, FRICTION, STOP_SPEED, dt);
 
   const wishspeed = computeWish(ctx);
-  // "nopre" also has to cover ground movement, not just AirMove: continuously
-  // turning wishdir while accelerate()'s addspeed check compares against
-  // dot(vel, wishdir) rather than |vel| lets ground-strafing gain speed past
-  // maxspeed the same way air-strafing does — friction alone doesn't fully
-  // suppress it at this codebase's tuning. Same cap, same "never claw back
-  // pre-existing speed" rule as AirMove.
-  const speedBefore = ctx.settings.noPrestrafe ? length2D(ctx.velocity) : 0;
   accelerate(ctx.velocity, ctx.wishDir, wishspeed, ACCELERATE, dt);
   ctx.velocity.y = 0;
 
+  // "nopre": air-strafe/prestrafe gain (AirMove.ts) is left completely free —
+  // this is where it gets spent instead. Ground speed is a hard ceiling at
+  // the player's current max speed, full stop, the moment they're grounded
+  // and moving under their own power: no "keep whatever you landed with"
+  // exception. That's the point of nopre — you can still build wild speed in
+  // the air for style/tech, you just can't cash it in as a permanent ground
+  // sprint.
   if (ctx.settings.noPrestrafe) {
-    const cap = Math.max(speedBefore, currentMaxSpeed(ctx));
-    const speedAfter = length2D(ctx.velocity);
-    if (speedAfter > cap) {
-      const scale = cap / speedAfter;
+    const cap = currentMaxSpeed(ctx);
+    const speed = length2D(ctx.velocity);
+    if (speed > cap) {
+      const scale = cap / speed;
       ctx.velocity.x *= scale;
       ctx.velocity.z *= scale;
     }

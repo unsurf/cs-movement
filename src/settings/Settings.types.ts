@@ -28,16 +28,13 @@ export interface Settings {
   /** sv_enablebunnyhopping 0 — clamp takeoff speed to 1.1 × maxspeed. */
   bhopSpeedClamp: boolean;
   /**
-   * "nopre": stops angled strafing — on the ground or in the air — from
-   * adding speed beyond the player's current ground max speed. Both
-   * accelerate() and airAccelerate() compare addspeed against
-   * dot(velocity, wishdir) rather than |velocity|, so continuously turning
-   * wishdir while strafing can gain speed past maxspeed either way; this
-   * caps both. It only blocks NEW gains from that turning-strafe accel —
-   * speed the player already has (a bhop chain with bhopSpeedClamp off, a
-   * perf-bonus takeoff, ...) is left alone, so this composes with those
-   * instead of silently overriding them — and it never applies while
-   * surfing, which legitimately depends on exceeding ground max speed.
+   * "nopre": air-strafe/prestrafe speed gain (see airAccelerate) is left
+   * completely unrestricted — this does NOT cap AirMove. Instead it puts a
+   * hard ceiling on GROUND speed at the player's current max speed: land
+   * with more than that (from prestrafing, a bhop chain, a perf-bonus
+   * takeoff, ...) and walkMove clamps it down the moment you're grounded and
+   * moving under your own power. You can still build wild air speed for
+   * style/tech; you just can't cash it in as a permanent ground sprint.
    */
   noPrestrafe: boolean;
   airAccelerate: number;

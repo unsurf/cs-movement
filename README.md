@@ -164,7 +164,7 @@ const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a br
 | `tickRate` | `128` | Advisory — you choose the actual `dt` passed to `tick()` |
 | `autobhop` | `true` | `sv_autobunnyhopping 1` — holding jump keeps hopping |
 | `bhopSpeedClamp` | `true` | `sv_enablebunnyhopping 0` — clamps takeoff speed to 1.1× maxspeed so hops can't compound speed. Set `false` for uncapped CS:GO-style bhop |
-| `noPrestrafe` | `true` | "nopre" — stops angled strafing, on the ground or in the air, from adding speed beyond the current ground max speed. Doesn't touch speed you already have from a takeoff bonus or an uncapped bhop chain, and doesn't affect surfing |
+| `noPrestrafe` | `true` | "nopre" — air-strafe/prestrafe gain stays completely free; this puts a hard ceiling on GROUND speed instead, so that gain can't be cashed in as a permanent ground sprint |
 | `airAccelerate` | `100` | `sv_airaccelerate` — this default is KZ/HNS-server tuned; CS:GO's default is `12` |
 | `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Flat max speeds, not percentages |
 | `showSpeed` / `showFps` / `showDebug` | `true` | HUD toggles — informational only, the sim ignores them |
@@ -187,24 +187,23 @@ UI against them).
 
 ### No Prestrafe ("nopre")
 
-`bhopSpeedClamp` only clamps speed at the instant of a ground→air takeoff.
-It says nothing about what happens *while moving* — and both `accelerate()`
-(ground) and `airAccelerate()` (air) compare their addspeed cap against
-`dot(velocity, wishdir)` rather than `|velocity|`, so continuously turning
-your wish direction while holding a strafe key gains speed past maxspeed
-either way. In the air that's the deliberate, documented asymmetry that
-makes bhop/air-strafe technique work at all (see `airAccelerate` above); on
-the ground, at this codebase's tuning, friction alone doesn't fully
-suppress the same trick.
+`airAccelerate()`'s addspeed cap deliberately compares against
+`dot(velocity, wishdir)` rather than `|velocity|` — that asymmetry is what
+makes air-strafe/prestrafe technique work at all (see `airAccelerate`
+above), and it's *not* affected by this setting: you can always build as
+much air speed as your strafing skill earns you, exactly as if `nopre`
+didn't exist.
 
-`noPrestrafe: true` (the default) caps *both*: it stops turning-strafe
-accel from adding **new** speed past your current ground max speed, on the
-ground or in the air. It's careful about what it doesn't touch, though — it
-never claws back speed you already have from somewhere else (a
-`bhopSpeedClamp: false` chain, a `perf` takeoff bonus), so it composes with
-those instead of silently overriding them, and it's exempt while
-`player.surfing` is true — riding a ramp is expected to exceed run speed;
-that's the whole point of surf.
+What `noPrestrafe: true` (the default) changes is what happens once you're
+back on the ground: `walkMove` puts a hard ceiling on ground speed at the
+player's current max speed (run/walk/crouch), full stop, the moment they're
+grounded and moving under their own power. Land with more than that — from
+prestrafing, an uncapped bhop chain, a `perf` takeoff bonus — and it gets
+clamped down instead of persisting as a permanent ground sprint. You can
+still fly through the air fast for style or technique; you just can't keep
+that speed once your feet are back on the floor. Surfing is unaffected
+either way, since it never runs through `walkMove` — riding a ramp is
+expected to exceed run speed; that's the whole point of surf.
 
 ### Perf bonus — manual-timing reward
 
