@@ -41,12 +41,15 @@ const WHEEL_JUMP_PULSE_MS = 50;
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
   log?: (msg: string) => void;
+  /** Source for the autobhop perf-chance roll. Default: Math.random. Inject for deterministic tests. */
+  rng?: () => number;
 }
 
 export class PlayerController implements MovementContext {
   readonly world: World;
   readonly settings: Settings;
   readonly log: (msg: string) => void;
+  readonly rng: () => number;
 
   origin: Vec3;
   velocity = vec3();
@@ -117,6 +120,7 @@ export class PlayerController implements MovementContext {
     this.world = world;
     this.settings = settings;
     this.log = opts.log ?? (() => {});
+    this.rng = opts.rng ?? Math.random;
     this.spawn = clone(spawn);
     this.origin = clone(spawn);
     this.prevPos = clone(spawn);

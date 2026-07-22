@@ -36,14 +36,25 @@ export function checkJump(ctx: MovementContext): void {
   if (ctx.settings.perf.enabled) {
     // Real bhop-assist velocity carry (sm_realbhop's model), not a synthetic
     // multiplier: blend the current (clamped/friction-decayed) velocity back
-    // toward what you actually landed with, weighted by how late this
-    // rejump is. hasJumpedBefore rules out chaining off a landing that never
-    // really happened — gravity settling you onto the ground you spawned on
-    // resets groundTicksSinceLanding to 0 exactly like a real landing does.
+    // toward what you actually landed with. hasJumpedBefore rules out
+    // chaining off a landing that never really happened — gravity settling
+    // you onto the ground you spawned on resets groundTicksSinceLanding to 0
+    // exactly like a real landing does.
     const framesTooLate = ctx.groundTicksSinceLanding;
-    const weight = ctx.hasJumpedBefore
-      ? bhopCarryWeight(framesTooLate, ctx.settings.perf.maxBhopFrames, ctx.settings.perf.framePenalty)
-      : 0;
+    let weight = 0;
+    if (ctx.hasJumpedBefore) {
+      if (ctx.settings.autobhop) {
+        // Held-jump autobhop always re-fires at 0 ticks late, so the
+        // frame-timing math below would treat every hop as a guaranteed
+        // full carry — permanently defeating bhopSpeedClamp, since the
+        // carry would restore whatever you landed with every single time
+        // and the clamp would never get a tick to actually hold speed down.
+        // Real servers roll a per-hop chance instead.
+        weight = ctx.rng() < ctx.settings.perf.autobhopChance ? 1 : 0;
+      } else {
+        weight = bhopCarryWeight(framesTooLate, ctx.settings.perf.maxBhopFrames, ctx.settings.perf.framePenalty);
+      }
+    }
     if (weight > 0) {
       ctx.velocity.x += (ctx.landingVelocity.x - ctx.velocity.x) * weight;
       ctx.velocity.z += (ctx.landingVelocity.z - ctx.velocity.z) * weight;
@@ -59,7 +70,11 @@ export function checkJump(ctx: MovementContext): void {
         ctx.velocity.z *= scale;
       }
 
-      ctx.lastHopQuality = framesTooLate <= 0 ? 'perfect' : 'grey';
+      // Under autobhop, timing is irrelevant to whether the carry succeeds
+      // (that's the whole reason it's a chance roll instead), so a hit is
+      // always 'perfect' regardless of how many ticks have actually passed
+      // since the last landing.
+      ctx.lastHopQuality = ctx.settings.autobhop || framesTooLate <= 0 ? 'perfect' : 'grey';
     } else {
       ctx.lastHopQuality = 'normal';
     }

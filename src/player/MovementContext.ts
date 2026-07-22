@@ -35,6 +35,8 @@ export interface MovementContext {
   readonly settings: Settings;
   /** Called on anomalies (unstuck pops, velocity kills). */
   readonly log: (msg: string) => void;
+  /** Source for the autobhop perf-chance roll. */
+  readonly rng: () => number;
 
   origin: Vec3;
   velocity: Vec3;

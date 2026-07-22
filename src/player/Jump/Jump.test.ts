@@ -126,7 +126,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000 }, // effectively no ceiling here
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000, autobhopChance: 0.38 }, // effectively no ceiling here; autobhop off in this block anyway
     });
     expect(delayedRejump(settings, 0)).toBe('perfect');
     expect(delayedRejump(settings, 2)).toBe('grey');
@@ -138,7 +138,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000 }, // effectively no ceiling here
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000, autobhopChance: 0.38 }, // effectively no ceiling here; autobhop off in this block anyway
     });
 
     const perfect = prestrafeLandThenRejump(settings, 0);
@@ -166,7 +166,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     // so the very first jump of a life could still carry a "landing
     // velocity" that was never really earned.
     const settings = makeSettings({
-      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000 },
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000, autobhopChance: 0.38 },
     });
     const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
     run(player, 64); // settle onto the ground — not a jump landing
@@ -176,33 +176,73 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
   });
 });
 
-describe('perf under autobhop: deterministic, not a coin flip', () => {
-  it('held jump always re-fires at 0 frames late, so a real chain is always perfect', () => {
-    const settings = makeSettings({
-      autobhop: true,
-      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000 }, // no ceiling here — see the dedicated ceiling test below
-    });
-    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
-    player.input.jump = true; // held the whole time, like a real player bhopping
-    let hopCount = 0;
-    let sawPerfect = false;
-    let sawNonPerfectAfterFirstHop = false;
-    for (let i = 0; i < 1500; i++) {
-      const wasGrounded = player.onGround;
-      run(player, 1);
-      const tookOff = wasGrounded && !player.onGround;
-      if (!tookOff) continue; // only the exact takeoff tick sets lastHopQuality
-      hopCount++;
-      if (hopCount === 1) continue; // the very first hop can't chain from anything
-      if (player.lastHopQuality === 'perfect') sawPerfect = true;
-      else sawNonPerfectAfterFirstHop = true;
-    }
-    expect(hopCount).toBeGreaterThan(5); // sanity: this genuinely chained several hops
-    expect(sawPerfect).toBe(true);
-    expect(sawNonPerfectAfterFirstHop).toBe(false);
+describe('perf under autobhop: a per-hop chance roll, not deterministic', () => {
+  // Regression: held-jump autobhop always re-fires at 0 ticks late, so
+  // treating that as a guaranteed full carry every hop permanently defeats
+  // bhopSpeedClamp — the carry restores whatever you landed with every
+  // single time, so the clamp never gets a tick to actually hold speed
+  // down. Confirmed against real nopre servers: holding autobhop with
+  // bhopSpeedClamp on should float around baseline speed, not sit high.
+
+  it('defaults autobhopChance to 0.38', () => {
+    expect(DEFAULT_SETTINGS.perf.autobhopChance).toBe(0.38);
   });
 
-  it('a long perfect chain with real air-strafing converges to a stable ceiling instead of compounding forever', () => {
+  it('rolls autobhopChance per hop: a hit carries the landing velocity, a miss leaves the vanilla clamp alone', () => {
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000, autobhopChance: 0.38 },
+    });
+
+    const hits = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 }); // always under 0.38
+    primeWithOneJump(hits);
+    hits.input.jump = true;
+    run(hits, 1);
+    expect(hits.lastHopQuality).toBe('perfect');
+
+    const misses = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.99 }); // always over 0.38
+    primeWithOneJump(misses);
+    misses.input.jump = true;
+    run(misses, 1);
+    expect(misses.lastHopQuality).toBe('normal');
+  });
+
+  it('a missed roll leaves the takeoff at exactly what bhopSpeedClamp computed, not the raw landing velocity', () => {
+    // The exact bug: under autobhop, a "perfect" carry used to be guaranteed
+    // every hop (0 ticks late, always), which meant it unconditionally
+    // restored the raw landing velocity and permanently defeated
+    // bhopSpeedClamp — a miss has to actually leave the clamp's reduction
+    // in place, not have it overwritten back up.
+    const settings = makeSettings({
+      autobhop: true,
+      bhopSpeedClamp: true,
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000, autobhopChance: 0.38 },
+    });
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.99 }); // never perfs
+    primeWithOneJump(player);
+    run(player, 64); // well past any window
+
+    // Build genuine high landing speed via prestrafe (same pattern as the
+    // other carry tests), well above the ~275 vanilla clamp.
+    player.origin.y = 3000;
+    player.onGround = false;
+    player.input.right = true;
+    while (!player.onGround) {
+      player.yaw -= 3;
+      run(player, 1);
+    }
+    const landingSpeed = player.horizontalSpeed;
+    expect(landingSpeed).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // sanity: real high landing speed
+
+    player.input.right = false;
+    player.input.jump = true;
+    run(player, 1); // the rejump under test — always misses (rng: () => 0.99)
+    expect(player.lastHopQuality).toBe('normal');
+    const maxScaled = DEFAULT_SETTINGS.runSpeed * 1.1; // BHOP_MAX_SPEED_FACTOR
+    expect(player.horizontalSpeed).toBeLessThanOrEqual(maxScaled + 0.5);
+  });
+
+  it('a long chain of hits with real air-strafing converges to a stable ceiling instead of compounding forever', () => {
     // Regression: the carry alone compounds without limit — chaining
     // perfect hops with genuine air-strafe technique previously reached
     // ~1140 u/s in this exact scenario and was still climbing, bounded only
@@ -211,12 +251,13 @@ describe('perf under autobhop: deterministic, not a coin flip', () => {
     // while airborne, so the actual equilibrium settles somewhat above
     // maxAirSpeed itself (the per-hop air-strafe gain has to be out-paced by
     // the squeeze for an equilibrium to exist at all) — the property this
-    // guards is convergence, not landing on maxAirSpeed exactly.
+    // guards is convergence, not landing on maxAirSpeed exactly. Always
+    // winning the roll (rng: () => 0) is the worst case for the ceiling.
     const settings = makeSettings({
       autobhop: true,
-      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 390 },
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 390, autobhopChance: 1 },
     });
-    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 });
     player.input.right = true;
     player.input.jump = true;
     const landingSpeeds: number[] = [];
@@ -240,19 +281,19 @@ describe('perf under autobhop: deterministic, not a coin flip', () => {
     expect(maxSecondHalf).toBeLessThan(700);
   });
 
-  it('an isolated jump taken long after the last landing is never perfect/grey, even under autobhop', () => {
-    // Being "in autobhop mode" isn't the same as "currently mid-chain": a
-    // single deliberate jump taken well after landing (walking around
-    // normally, not bhopping) must not carry anything.
+  it('an isolated jump taken long after the last landing still gets the same autobhopChance roll', () => {
+    // Under autobhop there's no separate "timing window" the way manual
+    // mode has one: every hop, chained or isolated, rolls the same flat
+    // chance — it's the roll itself, not recency, that decides.
     const settings = makeSettings({
       autobhop: true,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.975, maxAirSpeed: 10000 },
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.975, maxAirSpeed: 10000, autobhopChance: 0.38 },
     });
-    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 }); // always under 0.38
     primeWithOneJump(player); // satisfies hasJumpedBefore
     run(player, 64); // stand around well past maxBhopFrames before jumping again
     player.input.jump = true;
     run(player, 1); // an isolated jump, not a rejump
-    expect(player.lastHopQuality).toBe('normal');
+    expect(player.lastHopQuality).toBe('perfect'); // still eligible — autobhop doesn't gate on recency
   });
 });

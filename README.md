@@ -112,6 +112,7 @@ new PlayerController(world: World, settings: Settings, spawn: Vec3, opts?: Playe
 ```ts
 interface PlayerOptions {
   log?: (msg: string) => void; // anomalies: unstuck pops, blocked-move velocity kills
+  rng?: () => number;          // source for the autobhop perf-chance roll; inject for deterministic tests
 }
 ```
 
@@ -222,14 +223,15 @@ interface PerfSettings {
   maxBhopFrames: number;   // default 12 — ticks after landing a rejump can still carry velocity
   framePenalty: number;    // default 0.975 — per-frame-late decay toward no carry
   maxAirSpeed: number;     // default 390 — asymptotic ceiling a carry approaches, observed on nopre chasemod servers
+  autobhopChance: number;  // default 0.38 — per-hop chance of a carry under autobhop, observed on nopre chasemod servers
 }
 ```
 
 This is the actual mechanic real bhop/chasemod SourceMod plugins run (e.g.
 `sm_realbhop`'s model), not a synthetic speed multiplier. On landing, your
 horizontal velocity is snapshotted into `player.landingVelocity`. Rejump
-within `maxBhopFrames` ticks and your takeoff velocity blends back toward
-that snapshot:
+within `maxBhopFrames` ticks (manual timing — not `autobhop`, see below) and
+your takeoff velocity blends back toward that snapshot:
 
 ```
 velocity += (landingVelocity - velocity) * framePenalty ** framesTooLate
@@ -244,13 +246,22 @@ clamp above already set it to. `player.lastHopQuality`
 (`'perfect' | 'grey' | 'normal' | null`) reports which one just happened —
 flash a HUD element off it, drive an audio cue, whatever you like.
 
-There's no separate mode for `autobhop`: held jump always re-fires at 0
-ticks late, so a genuine chain is deterministically always `'perfect'` —
-autobhop is easy mode, not a coin flip, exactly like a real assisted server.
+Held-jump `autobhop` always re-fires at 0 ticks late, so the frame-timing
+math above would treat every single hop as a guaranteed full carry — which
+permanently defeats `bhopSpeedClamp`: the carry would restore whatever you
+landed with every time, so the clamp never gets a tick to actually hold
+speed down (confirmed against real nopre servers — holding autobhop with
+the clamp on should float around baseline speed, not sit high). So under
+`autobhop`, each hop instead rolls `autobhopChance` for a full carry; on a
+miss, nothing happens and the takeoff is left at whatever `bhopSpeedClamp`
+already set it to. Unlike manual timing, this roll isn't gated by
+`maxBhopFrames` or recency — an isolated jump taken well after your last
+landing gets the same flat chance as an active chain, since there's no
+"how late" to measure when autobhop's timing is trivially always 0.
 
-The carry alone compounds without limit — chaining perfect hops with real
-air-strafe technique otherwise climbs indefinitely. Whenever a carry
-actually happens, the resulting speed is squeezed through a
+The carry alone (on a hit) compounds without limit — chaining perfect hops
+with real air-strafe technique otherwise climbs indefinitely. Whenever a
+carry actually happens, the resulting speed is squeezed through a
 diminishing-returns curve that approaches `maxAirSpeed` instead of a hard
 clamp: speeds at or below it are untouched, and gains shrink the further
 past it a chain pushes. The squeeze only fires at the takeoff instant, not
@@ -258,15 +269,12 @@ continuously while airborne, so real air-strafe gain between hops can still
 push the *observed* ceiling somewhat above `maxAirSpeed` itself — that's a
 tunable approximation of a real server's feel, not an exact guarantee.
 
-A takeoff is only ever eligible for a carry if a real jump has already
-happened at some point before it, AND this takeoff is within
+A manual-timing takeoff is only ever eligible for a carry if a real jump
+has already happened at some point before it, AND this takeoff is within
 `maxBhopFrames` of the last landing — otherwise it's unconditionally
 `'normal'`. Without the first check, gravity settling you onto the ground
 you spawned on looks identical to a timed landing, so your very first jump
-could carry a "landing velocity" that was never really earned. Without the
-second, an isolated jump taken well after your last landing (walking around
-normally, not bhopping) could still carry — being "in autobhop mode" isn't
-the same as "currently mid-chain".
+could carry a "landing velocity" that was never really earned.
 
 ### Stamina
 
@@ -346,6 +354,9 @@ for (let i = 0; i < 512; i++) player.tick(1 / 128); // 4 seconds at 128 ticks/se
 
 console.log(player.horizontalSpeed); // ~250 — capped at runSpeed
 ```
+
+Inject `rng` in tests wherever you need the autobhop perf-chance roll to be
+deterministic instead of `Math.random`.
 
 ## API reference
 
