@@ -9,7 +9,8 @@ You bring the geometry and the draw loop; this brings the feel.
 
 - **Movement** — `sv_accelerate` / `sv_airaccelerate` / `sv_friction` faithful
   to CS:GO's cvars, the air-speed cap, the `sv_enablebunnyhopping 0` takeoff
-  clamp, plus two opt-in extras: a manual-timing "perf" bhop bonus and a
+  clamp, plus two opt-in extras: a real bhop-assist velocity carry (the
+  `sm_realbhop`-style mechanic actual bhop/chasemod servers run) and a
   CS2-style stamina pool.
 - **Collision** — Quake/Source-style box trace against convex brushes: planes
   are Minkowski-expanded by the hull and the move is clipped against them, the
@@ -111,7 +112,6 @@ new PlayerController(world: World, settings: Settings, spawn: Vec3, opts?: Playe
 ```ts
 interface PlayerOptions {
   log?: (msg: string) => void; // anomalies: unstuck pops, blocked-move velocity kills
-  rng?: () => number;          // source for the autobhop perf-chance roll; inject for deterministic tests
 }
 ```
 
@@ -125,6 +125,7 @@ Read these each frame to render:
 | `ducked`, `duckFrac`     | Duck state and 0→1 eye-height lerp progress                     |
 | `surfing`                | True while riding a steep-but-standable-adjacent slope           |
 | `onLadder`                | The `LadderVolume` currently gripped, or `null`                 |
+| `landingVelocity`         | Horizontal velocity snapshotted the instant of the last landing (see `perf`) |
 | `horizontalSpeed`        | Getter: `length2D(velocity)` — the number CS players actually watch |
 | `eyeHeight`              | Getter: lerped eye height for the current duck state             |
 | `mins`, `maxs`           | Getters: the current (stand or duck) hull extents                |
@@ -171,7 +172,7 @@ const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a br
 | `viewPunch` | `false` | Enables `landPunch` on hard landings |
 | `crosshair` | see below | Crosshair render settings — cosmetic only, the sim ignores them |
 | `stamina` | see below | CS2-style stamina pool, **disabled by default** |
-| `perf` | see below | Manual-timing bhop bonus, **disabled by default** |
+| `perf` | see below | Real bhop-assist velocity carry, **disabled by default** |
 
 `crosshair`, `stamina`, and `perf` are nested objects (`CrosshairSettings`,
 `StaminaSettings`, `PerfSettings` — all exported if you want to type your own
@@ -205,40 +206,48 @@ that speed once your feet are back on the floor. Surfing is unaffected
 either way, since it never runs through `walkMove` — riding a ramp is
 expected to exceed run speed; that's the whole point of surf.
 
-### Perf bonus — manual-timing reward
+### Perf — real bhop-assist velocity carry
 
 ```ts
 interface PerfSettings {
-  enabled: boolean;         // default false
-  greyWindowTicks: number;  // default 4
-  bonusFactor: number;      // default 0.05 — +5% takeoff speed at 0 ticks late
-  autobhopChance: number;   // default 0.42
+  enabled: boolean;        // default false
+  maxBhopFrames: number;   // default 12 — ticks after landing a rejump can still carry velocity
+  framePenalty: number;    // default 0.975 — per-frame-late decay toward no carry
 }
 ```
 
-With `perf.enabled`, a takeoff on the very first tick after landing (the
-earliest possible manual rejump) gets a `bonusFactor` takeoff-speed
-multiplier, tapering linearly to 0 over `greyWindowTicks`. This rewards
-*timing* on top of the vanilla "skip a tick of ground friction" effect — it
-doesn't replace it, and it stacks with either bhop mode above.
+This is the actual mechanic real bhop/chasemod SourceMod plugins run (e.g.
+`sm_realbhop`'s model), not a synthetic speed multiplier. On landing, your
+horizontal velocity is snapshotted into `player.landingVelocity`. Rejump
+within `maxBhopFrames` ticks and your takeoff velocity blends back toward
+that snapshot:
 
-Because held-jump autobhop always re-fires on the earliest possible tick,
-the tick-based classification would make every hop "perfect" — a guaranteed
-buff, not a bonus. So under `autobhop`, each hop instead rolls
-`autobhopChance` for whether it counts as perfect. `player.lastHopQuality`
+```
+velocity += (landingVelocity - velocity) * framePenalty ** framesTooLate
+```
+
+At 0 ticks late the weight is 1 — a full carry, restoring exactly what you
+had when you landed, even if `bhopSpeedClamp` or ground friction had already
+cut it down. That's a `'perfect'` hop. The weight decays every tick you
+wait, `'grey'` in between, and past `maxBhopFrames` nothing happens at all —
+a hard cutoff, not a taper — so the takeoff is left at whatever the vanilla
+clamp above already set it to. `player.lastHopQuality`
 (`'perfect' | 'grey' | 'normal' | null`) reports which one just happened —
 flash a HUD element off it, drive an audio cue, whatever you like.
 
-A takeoff is only ever eligible for `'perfect'`/`'grey'` if a real jump has
-already happened at some point before it, AND this takeoff is within
-`greyWindowTicks` of the last landing — otherwise it's unconditionally
-`'normal'`, in both modes. Without the first check, gravity settling you
-onto the ground you spawned on looks identical to a timed landing, so your
-very first jump could get misclassified as an instant rejump. Without the
-second, being "in autobhop mode" would be conflated with "currently mid
-bhop-chain": an isolated jump taken well after your last landing (walking
-around normally, not bhopping) could still win autobhop's chance roll it
-hasn't earned, since that roll otherwise ignores timing entirely.
+There's no separate mode for `autobhop`: held jump always re-fires at 0
+ticks late, so a genuine chain is deterministically always `'perfect'` —
+autobhop is easy mode, not a coin flip, exactly like a real assisted server.
+
+A takeoff is only ever eligible for a carry if a real jump has already
+happened at some point before it, AND this takeoff is within
+`maxBhopFrames` of the last landing — otherwise it's unconditionally
+`'normal'`. Without the first check, gravity settling you onto the ground
+you spawned on looks identical to a timed landing, so your very first jump
+could carry a "landing velocity" that was never really earned. Without the
+second, an isolated jump taken well after your last landing (walking around
+normally, not bhopping) could still carry — being "in autobhop mode" isn't
+the same as "currently mid-chain".
 
 ### Stamina
 
@@ -319,9 +328,6 @@ for (let i = 0; i < 512; i++) player.tick(1 / 128); // 4 seconds at 128 ticks/se
 console.log(player.horizontalSpeed); // ~250 — capped at runSpeed
 ```
 
-Inject `rng` in tests wherever you need the autobhop perf-chance roll to be
-deterministic instead of `Math.random`.
-
 ## API reference
 
 Everything below is exported from the package root (`@unsurf/cs-movement`).
@@ -340,7 +346,7 @@ feature's own tunables: `FRICTION`/`STOP_SPEED`, `ACCELERATE`,
 
 **Physics (pure functions)** — `applyFriction`, `accelerate`, `airAccelerate`,
 `clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`,
-`perfBonusFactor`
+`bhopCarryWeight`
 
 **Collision** — `Plane`, `Brush`, `LadderVolume`, `TraceResult`,
 `brushFromAABB`, `brushFromOrientedBox`, `traceBox`, `boxInBrush`, `World`

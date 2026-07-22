@@ -35,8 +35,6 @@ export interface MovementContext {
   readonly settings: Settings;
   /** Called on anomalies (unstuck pops, velocity kills). */
   readonly log: (msg: string) => void;
-  /** Source for the autobhop perf-chance roll. */
-  readonly rng: () => number;
 
   origin: Vec3;
   velocity: Vec3;
@@ -70,6 +68,8 @@ export interface MovementContext {
   groundTicksSinceLanding: number; // ground-friction ticks elapsed since landing
   /** True once a real jump (via checkJump) has ever launched this life — gates perf/hop-quality. */
   hasJumpedBefore: boolean;
+  /** Horizontal velocity snapshotted the instant of the last landing; see PerfBonus. */
+  landingVelocity: Vec3;
   stuckTicks: number;
   blockedTicks: number;
   contactsThisTick: string[];

@@ -4,7 +4,7 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-import { perfBonusFactor } from '../../physics/PerfBonus/PerfBonus.js';
+import { bhopCarryWeight } from '../../physics/PerfBonus/PerfBonus.js';
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
 import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
@@ -18,7 +18,9 @@ export function checkJump(ctx: MovementContext): void {
   if (!ctx.settings.autobhop && ctx.oldJump) return;
 
   // sv_enablebunnyhopping 0: clamp takeoff speed to 1.1 × maxspeed
-  // (Source's PreventBunnyJumping), so hops don't compound speed.
+  // (Source's PreventBunnyJumping), so hops don't compound speed. Real
+  // bhop-assist plugins run on top of this, not instead of it — a failed
+  // rejump (see below) is left exactly here, at the vanilla clamp.
   if (ctx.settings.bhopSpeedClamp) {
     const maxScaled = currentMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;
     const speed = ctx.horizontalSpeed;
@@ -30,34 +32,22 @@ export function checkJump(ctx: MovementContext): void {
   }
 
   if (ctx.settings.perf.enabled) {
-    let bonus: number;
-    // Perf/hop-quality rewards a REJUMP — a takeoff within the grey window
-    // of an actual previous landing. It can never apply when either:
-    //  - there's no previous jump to chain from at all (hasJumpedBefore),
-    //    which without this check is indistinguishable from an instant
-    //    rejump: gravity settling you onto the ground you spawned on resets
-    //    groundTicksSinceLanding to 0 exactly like a real landing does; or
-    //  - the last landing (real or spawn-settle) happened longer ago than
-    //    the grey window — an isolated jump taken after standing/walking
-    //    around isn't bhopping, no matter how long autobhop has been on.
-    const withinChainWindow = ctx.hasJumpedBefore && ctx.groundTicksSinceLanding <= ctx.settings.perf.greyWindowTicks;
-    if (!withinChainWindow) {
-      ctx.lastHopQuality = 'normal';
-      bonus = 0;
-    } else if (ctx.settings.autobhop) {
-      // Autobhop always re-fires on the earliest possible tick, so the
-      // tick-based classification below would always read 'perfect' — a
-      // guaranteed buff, not a bonus. Roll a chance instead.
-      const isPerfect = ctx.rng() < ctx.settings.perf.autobhopChance;
-      ctx.lastHopQuality = isPerfect ? 'perfect' : 'normal';
-      bonus = isPerfect ? ctx.settings.perf.bonusFactor : 0;
+    // Real bhop-assist velocity carry (sm_realbhop's model), not a synthetic
+    // multiplier: blend the current (clamped/friction-decayed) velocity back
+    // toward what you actually landed with, weighted by how late this
+    // rejump is. hasJumpedBefore rules out chaining off a landing that never
+    // really happened — gravity settling you onto the ground you spawned on
+    // resets groundTicksSinceLanding to 0 exactly like a real landing does.
+    const framesTooLate = ctx.groundTicksSinceLanding;
+    const weight = ctx.hasJumpedBefore
+      ? bhopCarryWeight(framesTooLate, ctx.settings.perf.maxBhopFrames, ctx.settings.perf.framePenalty)
+      : 0;
+    if (weight > 0) {
+      ctx.velocity.x += (ctx.landingVelocity.x - ctx.velocity.x) * weight;
+      ctx.velocity.z += (ctx.landingVelocity.z - ctx.velocity.z) * weight;
+      ctx.lastHopQuality = framesTooLate <= 0 ? 'perfect' : 'grey';
     } else {
-      bonus = perfBonusFactor(ctx.groundTicksSinceLanding, ctx.settings.perf.greyWindowTicks, ctx.settings.perf.bonusFactor);
-      ctx.lastHopQuality = ctx.groundTicksSinceLanding <= 0 ? 'perfect' : bonus > 0 ? 'grey' : 'normal';
-    }
-    if (bonus > 0) {
-      ctx.velocity.x *= 1 + bonus;
-      ctx.velocity.z *= 1 + bonus;
+      ctx.lastHopQuality = 'normal';
     }
   }
 

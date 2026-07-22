@@ -35,15 +35,12 @@ import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
   log?: (msg: string) => void;
-  /** Source for the autobhop perf-chance roll. Default: Math.random. Inject for deterministic tests. */
-  rng?: () => number;
 }
 
 export class PlayerController implements MovementContext {
   readonly world: World;
   readonly settings: Settings;
   readonly log: (msg: string) => void;
-  readonly rng: () => number;
 
   origin: Vec3;
   velocity = vec3();
@@ -92,6 +89,8 @@ export class PlayerController implements MovementContext {
   // jump, so perf/hop-quality can never fire on a jump with no previous jump
   // to chain from (see Jump.ts).
   hasJumpedBefore = false;
+  /** Horizontal velocity snapshotted the instant of the last landing; see PerfBonus. */
+  landingVelocity = vec3();
   stuckTicks = 0;
   blockedTicks = 0;
   contactsThisTick: string[] = [];
@@ -112,7 +111,6 @@ export class PlayerController implements MovementContext {
     this.world = world;
     this.settings = settings;
     this.log = opts.log ?? (() => {});
-    this.rng = opts.rng ?? Math.random;
     this.spawn = clone(spawn);
     this.origin = clone(spawn);
     this.prevPos = clone(spawn);
@@ -189,6 +187,7 @@ export class PlayerController implements MovementContext {
     this.stamina = 0;
     this.groundTicksSinceLanding = 0;
     this.hasJumpedBefore = false;
+    set(this.landingVelocity, 0, 0, 0);
     this.lastHopQuality = null;
   }
 

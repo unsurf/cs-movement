@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { perfBonusFactor } from './PerfBonus';
+import { bhopCarryWeight } from './PerfBonus';
 
-describe('perfBonusFactor', () => {
-  it('gives the full bonus at 0 ticks late, tapering to 0 at the window edge', () => {
-    expect(perfBonusFactor(0, 4, 0.2)).toBe(0.2);
-    expect(perfBonusFactor(2, 4, 0.2)).toBeCloseTo(0.1, 10);
-    expect(perfBonusFactor(4, 4, 0.2)).toBe(0);
-    expect(perfBonusFactor(10, 4, 0.2)).toBe(0);
+describe('bhopCarryWeight', () => {
+  it('gives full carry at 0 frames late, decaying by framePenalty per frame late', () => {
+    expect(bhopCarryWeight(0, 12, 0.975)).toBe(1);
+    expect(bhopCarryWeight(1, 12, 0.975)).toBeCloseTo(0.975, 10);
+    expect(bhopCarryWeight(2, 12, 0.975)).toBeCloseTo(0.975 ** 2, 10);
+    expect(bhopCarryWeight(12, 12, 0.975)).toBeCloseTo(0.975 ** 12, 10);
   });
 
-  it('a zero-width window only rewards a 0-tick takeoff', () => {
-    expect(perfBonusFactor(0, 0, 0.2)).toBe(0.2);
-    expect(perfBonusFactor(1, 0, 0.2)).toBe(0);
+  it('hard-cuts to 0 past maxBhopFrames — a discontinuity, not a taper', () => {
+    expect(bhopCarryWeight(13, 12, 0.975)).toBe(0);
+    expect(bhopCarryWeight(100, 12, 0.975)).toBe(0);
+  });
+
+  it('a negative frame count (shouldn\'t happen, but) is treated as no carry', () => {
+    expect(bhopCarryWeight(-1, 12, 0.975)).toBe(0);
   });
 });
