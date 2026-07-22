@@ -31,13 +31,17 @@ export function checkJump(ctx: MovementContext): void {
 
   if (ctx.settings.perf.enabled) {
     let bonus: number;
-    if (!ctx.hasJumpedBefore) {
-      // Perf/hop-quality is a rejump-timing reward — it can't apply to a
-      // jump with no previous jump to chain from. Without this, gravity
-      // settling you onto the ground you spawned on (which resets
-      // groundTicksSinceLanding to 0 exactly like a real landing) makes your
-      // very first jump look like an instant rejump, and autobhop's chance
-      // roll doesn't check landing history at all.
+    // Perf/hop-quality rewards a REJUMP — a takeoff within the grey window
+    // of an actual previous landing. It can never apply when either:
+    //  - there's no previous jump to chain from at all (hasJumpedBefore),
+    //    which without this check is indistinguishable from an instant
+    //    rejump: gravity settling you onto the ground you spawned on resets
+    //    groundTicksSinceLanding to 0 exactly like a real landing does; or
+    //  - the last landing (real or spawn-settle) happened longer ago than
+    //    the grey window — an isolated jump taken after standing/walking
+    //    around isn't bhopping, no matter how long autobhop has been on.
+    const withinChainWindow = ctx.hasJumpedBefore && ctx.groundTicksSinceLanding <= ctx.settings.perf.greyWindowTicks;
+    if (!withinChainWindow) {
       ctx.lastHopQuality = 'normal';
       bonus = 0;
     } else if (ctx.settings.autobhop) {

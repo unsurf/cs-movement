@@ -230,12 +230,15 @@ buff, not a bonus. So under `autobhop`, each hop instead rolls
 flash a HUD element off it, drive an audio cue, whatever you like.
 
 A takeoff is only ever eligible for `'perfect'`/`'grey'` if a real jump has
-already happened at some point before it — the very first jump of a life
-(or since `respawn()`) is always `'normal'`, in both modes. Otherwise,
-gravity settling you onto the ground you spawned on looks identical to a
-timed landing, so that first jump could get misclassified as an instant
-rejump (guaranteed "perfect" under manual timing, an undeserved chance at
-it under autobhop) despite there being no previous jump to chain from.
+already happened at some point before it, AND this takeoff is within
+`greyWindowTicks` of the last landing — otherwise it's unconditionally
+`'normal'`, in both modes. Without the first check, gravity settling you
+onto the ground you spawned on looks identical to a timed landing, so your
+very first jump could get misclassified as an instant rejump. Without the
+second, being "in autobhop mode" would be conflated with "currently mid
+bhop-chain": an isolated jump taken well after your last landing (walking
+around normally, not bhopping) could still win autobhop's chance roll it
+hasn't earned, since that roll otherwise ignores timing entirely.
 
 ### Stamina
 

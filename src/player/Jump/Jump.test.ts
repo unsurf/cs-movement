@@ -177,6 +177,25 @@ describe('perf bonus under autobhop: chance-based instead of guaranteed', () => 
     expect(player.lastHopQuality).toBe('normal');
   });
 
+  it('an isolated jump taken long after the last landing is never perfect/grey either, under autobhop', () => {
+    // Regression: autobhop's chance roll didn't check timing at all, so a
+    // single deliberate jump taken well after landing (walking around
+    // normally, not bhopping) could still roll a bonus it hasn't earned —
+    // exactly like a genuine immediate rejump would. Being "in autobhop
+    // mode" isn't the same as "currently mid-chain".
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2, autobhopChance: 0.42 },
+    });
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 }); // always "wins" the roll
+    run(player, 64);
+    primeWithOneJump(player); // satisfies hasJumpedBefore
+    run(player, 64); // stand around well past greyWindowTicks before jumping again
+    player.input.jump = true;
+    run(player, 1); // an isolated jump, not a rejump
+    expect(player.lastHopQuality).toBe('normal');
+  });
+
   it('over many jumps, the perfect rate roughly tracks autobhopChance', () => {
     const settings = makeSettings({
       autobhop: true,
