@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GRAVITY } from '../../constants';
 import { vec3 } from '../../math/vec3';
 import { World } from '../../physics/World/World';
-import { brushFromAABB } from '../../physics/Collision/Collision';
+import { brushFromAABB, brushFromOrientedBox } from '../../physics/Collision/Collision';
 import { PlayerController } from '../PlayerController';
 import { DEFAULT_SETTINGS } from '../../settings/Settings';
 import type { Settings } from '../../settings/Settings';
@@ -242,17 +242,15 @@ describe('perf under autobhop: a per-hop chance roll, not deterministic', () => 
     expect(player.horizontalSpeed).toBeLessThanOrEqual(maxScaled + 0.5);
   });
 
-  it('a long chain of hits with real air-strafing converges to a stable ceiling instead of compounding forever', () => {
-    // Regression: the carry alone compounds without limit — chaining
-    // perfect hops with genuine air-strafe technique previously reached
-    // ~1140 u/s in this exact scenario and was still climbing, bounded only
-    // by the test world's floor running out, not by any ceiling in the
-    // physics. The squeeze only fires at each takeoff, not continuously
-    // while airborne, so the actual equilibrium settles somewhat above
-    // maxAirSpeed itself (the per-hop air-strafe gain has to be out-paced by
-    // the squeeze for an equilibrium to exist at all) — the property this
-    // guards is convergence, not landing on maxAirSpeed exactly. Always
-    // winning the roll (rng: () => 0) is the worst case for the ceiling.
+  it('never exceeds maxAirSpeed by more than the softness tolerance, however long the chain runs', () => {
+    // Regression: capping only at the takeoff instant (the carry) let
+    // air-strafe gain between hops push the observed peak well past the
+    // intended ceiling — ~1140 u/s in this exact scenario and still
+    // climbing when takeoff-only capping was tried, ~490-520 even with a
+    // tighter takeoff-only squeeze. The ceiling has to apply continuously
+    // while airborne (AirMove.ts), not just at each carry, for "should
+    // never exceed maxAirSpeed" to actually hold. Always winning the roll
+    // (rng: () => 0) is the worst case for the ceiling.
     const settings = makeSettings({
       autobhop: true,
       perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 390, autobhopChance: 1 },
@@ -260,25 +258,44 @@ describe('perf under autobhop: a per-hop chance roll, not deterministic', () => 
     const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 });
     player.input.right = true;
     player.input.jump = true;
-    const landingSpeeds: number[] = [];
+    let maxSpeedEver = 0;
+    let hopCount = 0;
     for (let i = 0; i < 20000; i++) {
       const wasGrounded = player.onGround;
       if (!wasGrounded) player.yaw -= 3; // continuous air-strafe technique
       run(player, 1);
-      if (!wasGrounded && player.onGround) landingSpeeds.push(player.horizontalSpeed);
+      if (wasGrounded && !player.onGround) hopCount++;
+      maxSpeedEver = Math.max(maxSpeedEver, player.horizontalSpeed);
     }
-    expect(landingSpeeds.length).toBeGreaterThan(50); // sanity: this genuinely chained many hops
-    const firstHalf = landingSpeeds.slice(0, Math.floor(landingSpeeds.length / 2));
-    const secondHalf = landingSpeeds.slice(Math.floor(landingSpeeds.length / 2));
-    const maxFirstHalf = Math.max(...firstHalf);
-    const maxSecondHalf = Math.max(...secondHalf);
-    expect(maxFirstHalf).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // sanity: a real chain happened
-    // Converges: the back half of a long chain isn't meaningfully faster
-    // than the front half. An uncapped chain keeps climbing throughout.
-    expect(maxSecondHalf).toBeLessThan(maxFirstHalf + 5);
+    expect(hopCount).toBeGreaterThan(50); // sanity: this genuinely chained many hops
+    expect(maxSpeedEver).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // sanity: a real chain happened
     // Nowhere near the ~1140 (and still climbing) an uncapped chain reached
-    // in this exact scenario.
-    expect(maxSecondHalf).toBeLessThan(700);
+    // in this exact scenario — stays within the ceiling's softness margin.
+    expect(maxSpeedEver).toBeLessThan(settings.perf.maxAirSpeed + 20);
+  });
+
+  it('surfing is exempt from the air-speed ceiling — a ramp can legitimately exceed maxAirSpeed', () => {
+    const ax = vec3(1, 0, 0);
+    const ay = vec3(0, 0.5, Math.sqrt(1 - 0.25));
+    const az = vec3(0, -Math.sqrt(1 - 0.25), 0.5); // ax × ay
+    const world = makeWorld();
+    world.solids.push(brushFromOrientedBox(vec3(0, 600, 0), vec3(400, 20, 400), ax, ay, az));
+
+    const settings = makeSettings({
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 390, autobhopChance: 0.38 },
+    });
+    const player = new PlayerController(world, settings, vec3(0, 2000, 0));
+    player.input.right = true;
+    let maxSpeed = 0;
+    let sawSurf = false;
+    for (let i = 0; i < 3000 && !player.onGround; i++) {
+      player.yaw -= 3;
+      run(player, 1);
+      if (player.surfing) sawSurf = true;
+      maxSpeed = Math.max(maxSpeed, player.horizontalSpeed);
+    }
+    expect(sawSurf).toBe(true); // sanity: this genuinely touched the surf ramp
+    expect(maxSpeed).toBeGreaterThan(settings.perf.maxAirSpeed * 1.3); // uncapped — surf is meant to exceed it
   });
 
   it('an isolated jump taken long after the last landing still gets the same autobhopChance roll', () => {

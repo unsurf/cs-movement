@@ -4,9 +4,7 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-import { length2D } from '../../math/vec3.js';
-import { AIR_SPEED_CEILING_SOFTNESS } from '../../physics/PerfBonus/PerfBonus.config.js';
-import { applyAirSpeedCeiling, bhopCarryWeight } from '../../physics/PerfBonus/PerfBonus.js';
+import { bhopCarryWeight } from '../../physics/PerfBonus/PerfBonus.js';
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
 import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
@@ -59,16 +57,11 @@ export function checkJump(ctx: MovementContext): void {
       ctx.velocity.x += (ctx.landingVelocity.x - ctx.velocity.x) * weight;
       ctx.velocity.z += (ctx.landingVelocity.z - ctx.velocity.z) * weight;
 
-      // The carry alone compounds without limit across a chain; real
-      // chasemod servers top out around maxAirSpeed in practice. Squeeze
-      // toward that ceiling with diminishing returns rather than a hard cap.
-      const carriedSpeed = length2D(ctx.velocity);
-      const cappedSpeed = applyAirSpeedCeiling(carriedSpeed, ctx.settings.perf.maxAirSpeed, AIR_SPEED_CEILING_SOFTNESS);
-      if (cappedSpeed < carriedSpeed) {
-        const scale = cappedSpeed / carriedSpeed;
-        ctx.velocity.x *= scale;
-        ctx.velocity.z *= scale;
-      }
+      // No local squeeze here — AirMove.ts applies the maxAirSpeed ceiling
+      // continuously while airborne (including this very tick, since it
+      // runs right after this function whenever onGround just went false),
+      // which is what actually keeps a chain from exceeding it, not just
+      // the takeoff instant.
 
       // Under autobhop, timing is irrelevant to whether the carry succeeds
       // (that's the whole reason it's a chance roll instead), so a hit is

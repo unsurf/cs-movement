@@ -31,15 +31,15 @@
  * (non-autobhop) rejumps keep the deterministic frame-timing carry above —
  * real reflexes hitting frame 0 repeatedly is a skill, not a triviality.
  *
- * The carry alone (on a hit) compounds without limit across a chain (each
- * perfect hop can add more air-strafe speed on top of the last), which
- * isn't how real chasemod servers feel in practice — players report an
- * observed air-speed ceiling around `maxAirSpeed`. So whenever a carry
- * actually happens, the resulting speed is squeezed through a
- * diminishing-returns curve that approaches `maxAirSpeed` but never quite
- * reaches it: gains from chaining shrink the closer you already are to the
- * ceiling, rather than being flatly clamped. Speeds at or below
- * `maxAirSpeed` are left untouched.
+ * Chaining hits with real air-strafe technique otherwise climbs indefinitely
+ * (each perfect hop can add more speed on top of the last), which isn't how
+ * real chasemod servers feel in practice — players report air speed never
+ * exceeding `maxAirSpeed` (unless surfing, a different physics path via
+ * ramp geometry). So whenever `enabled`, AirMove.ts squeezes air speed
+ * itself through a diminishing-returns curve every airborne tick — not just
+ * at the carry — that approaches `maxAirSpeed` but never quite reaches it:
+ * gains shrink the closer you already are to the ceiling, rather than being
+ * flatly clamped. Speeds at or below `maxAirSpeed` are left untouched.
  */
 export interface PerfSettings {
   enabled: boolean;

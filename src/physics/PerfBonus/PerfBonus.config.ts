@@ -14,18 +14,13 @@ export const DEFAULT_PERF_SETTINGS: PerfSettings = {
   autobhopChance: 0.38, // observed nopre chasemod rate
 };
 
-// How gradually the ceiling is approached once a carry pushes speed past
+// How gradually the ceiling is approached once air speed pushes past
 // maxAirSpeed — not user-tunable (unlike maxAirSpeed itself), same tier as
-// BHOP_MAX_SPEED_FACTOR. Lower = the ceiling bites harder/sooner.
-//
-// The squeeze only fires at the takeoff moment (the carry), not continuously
-// while airborne — air-strafing between hops can still add real speed on
-// top of a capped takeoff before the next landing. That per-hop gain is
-// technique/airaccelerate-dependent and the squeeze has to out-pace it for
-// an equilibrium to exist at all, so the actual observed ceiling settles
-// somewhat above maxAirSpeed itself (empirically ~490-520 against
-// maxAirSpeed=390 with this codebase's default airaccelerate and a
-// continuous-turn strafe) rather than landing on it exactly. 10 keeps that
-// gap as tight as reasonably possible without the curve turning into a hard
-// clamp in disguise.
+// BHOP_MAX_SPEED_FACTOR. Lower = the ceiling bites harder/sooner. Applied
+// every airborne tick in AirMove.ts (not just at the carry in Jump.ts) —
+// capping only at takeoff let air-strafe gain between hops push the
+// observed peak well past maxAirSpeed (empirically ~490-520 against a
+// target of 390); capping continuously keeps the true asymptote (maxAirSpeed
+// + this softness) as the actual observed ceiling, matching "never exceeds
+// maxAirSpeed" for real.
 export const AIR_SPEED_CEILING_SOFTNESS = 10;

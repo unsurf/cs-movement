@@ -259,15 +259,16 @@ already set it to. Unlike manual timing, this roll isn't gated by
 landing gets the same flat chance as an active chain, since there's no
 "how late" to measure when autobhop's timing is trivially always 0.
 
-The carry alone (on a hit) compounds without limit — chaining perfect hops
-with real air-strafe technique otherwise climbs indefinitely. Whenever a
-carry actually happens, the resulting speed is squeezed through a
-diminishing-returns curve that approaches `maxAirSpeed` instead of a hard
-clamp: speeds at or below it are untouched, and gains shrink the further
-past it a chain pushes. The squeeze only fires at the takeoff instant, not
-continuously while airborne, so real air-strafe gain between hops can still
-push the *observed* ceiling somewhat above `maxAirSpeed` itself — that's a
-tunable approximation of a real server's feel, not an exact guarantee.
+Chaining hits with real air-strafe technique otherwise climbs indefinitely,
+so whenever `perf.enabled`, air speed itself is squeezed every airborne
+tick (`AirMove.ts`, not just at the carry) through a diminishing-returns
+curve that approaches `maxAirSpeed` instead of a hard clamp: speeds at or
+below it are untouched, and gains shrink the further past it you push.
+Surfing is exempt — riding a ramp's geometry is a different physics path
+and is meant to exceed this. (An earlier version only squeezed the carry at
+the takeoff instant; air-strafe gain between hops then pushed the
+*observed* ceiling well past `maxAirSpeed` — capping air speed continuously
+is what actually makes "never exceeds `maxAirSpeed`, unless surfing" true.)
 
 A manual-timing takeoff is only ever eligible for a carry if a real jump
 has already happened at some point before it, AND this takeoff is within
