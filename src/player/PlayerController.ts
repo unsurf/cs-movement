@@ -61,6 +61,8 @@ export class PlayerController implements MovementContext {
 
   /** True while standing on a surf-steep slope (airborne rules, no friction). */
   surfing = false;
+  /** True from the moment surfing starts until the next real ground landing. */
+  surfedSinceGrounded = false;
 
   // Interpolation snapshots (position + eye height per tick).
   prevPos: Vec3;
@@ -72,6 +74,8 @@ export class PlayerController implements MovementContext {
 
   /** 0..settings.stamina.max; only meaningful while settings.stamina.enabled. */
   stamina = 0;
+  /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
+  lastHopQuality: 'perfect' | 'normal' | null = null;
 
   readonly input: InputState = {
     forward: false,
@@ -87,6 +91,14 @@ export class PlayerController implements MovementContext {
   oldJump = false; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
   fallVelocity = 0;
+  groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
+  // Gravity settling you onto the ground you spawned on isn't a jump landing
+  // — this only flips true the moment checkJump actually launches a real
+  // jump, so the perfect-bhop carry can never fire on a jump with no
+  // previous jump to chain from (see Jump.ts).
+  hasJumpedBefore = false;
+  /** Horizontal velocity snapshotted the instant of the last landing; see PerfBonus. */
+  landingVelocity = vec3();
   stuckTicks = 0;
   blockedTicks = 0;
   contactsThisTick: string[] = [];
@@ -202,6 +214,11 @@ export class PlayerController implements MovementContext {
     this.onLadder = null;
     this.ducked = false;
     this.stamina = 0;
+    this.groundTicksSinceLanding = 0;
+    this.hasJumpedBefore = false;
+    this.surfedSinceGrounded = false;
+    set(this.landingVelocity, 0, 0, 0);
+    this.lastHopQuality = null;
   }
 
   // -- Simulation -----------------------------------------------------------
@@ -230,6 +247,7 @@ export class PlayerController implements MovementContext {
         checkJump(this);
         if (this.onGround) {
           walkMove(this, dt);
+          this.groundTicksSinceLanding++;
         } else {
           this.fallVelocity = -this.velocity.y;
           airMove(this, dt);

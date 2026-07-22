@@ -34,6 +34,12 @@ export function categorizePosition(ctx: MovementContext): void {
     copy(ctx.groundNormal, tr.normal);
     copy(ctx.origin, tr.endPos);
     if (wasAirborne) {
+      ctx.groundTicksSinceLanding = 0;
+      // Only y gets clipped by the floor plane's normal this tick — x/z still
+      // hold the actual speed the player landed with. Snapshot it now, before
+      // walkMove's friction gets a chance to bleed it, so a perfect rejump
+      // has something real to carry back to (see PerfBonus).
+      set(ctx.landingVelocity, ctx.velocity.x, ctx.velocity.y, ctx.velocity.z);
       if (ctx.settings.stamina.enabled) {
         ctx.stamina = addStamina(ctx.stamina, ctx.settings.stamina.landCost, ctx.settings.stamina.max);
       }

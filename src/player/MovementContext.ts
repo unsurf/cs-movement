@@ -48,6 +48,8 @@ export interface MovementContext {
   onLadder: LadderVolume | null;
   /** True while standing on a surf-steep slope (airborne rules, no friction). */
   surfing: boolean;
+  /** True from the moment surfing starts until the next real ground landing. */
+  surfedSinceGrounded: boolean;
 
   /** Position snapshot from the start of this tick, for blocked-move detection. */
   prevPos: Vec3;
@@ -57,12 +59,19 @@ export interface MovementContext {
 
   /** 0..settings.stamina.max; only meaningful while settings.stamina.enabled. */
   stamina: number;
+  /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
+  lastHopQuality: 'perfect' | 'normal' | null;
 
   readonly input: InputState;
 
   oldJump: boolean; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off
   fallVelocity: number;
+  groundTicksSinceLanding: number; // ground-friction ticks elapsed since landing
+  /** True once a real jump (via checkJump) has ever launched this life — gates the perfect-bhop carry. */
+  hasJumpedBefore: boolean;
+  /** Horizontal velocity snapshotted the instant of the last landing; see PerfBonus. */
+  landingVelocity: Vec3;
   stuckTicks: number;
   blockedTicks: number;
   contactsThisTick: string[];

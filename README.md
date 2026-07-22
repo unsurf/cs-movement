@@ -125,10 +125,11 @@ Read these each frame to render:
 | `ducked`, `duckFrac`     | Duck state and 0→1 eye-height lerp progress                     |
 | `surfing`                | True while riding a steep-but-standable-adjacent slope           |
 | `onLadder`                | The `LadderVolume` currently gripped, or `null`                 |
+| `landingVelocity`         | Horizontal velocity snapshotted the instant of the last landing (see `perf`) |
 | `horizontalSpeed`        | Getter: `length2D(velocity)` — the number CS players actually watch |
 | `eyeHeight`              | Getter: lerped eye height for the current duck state             |
 | `mins`, `maxs`           | Getters: the current (stand or duck) hull extents                |
-| `stamina`                | Only meaningful with `settings.stamina` enabled                  |
+| `stamina`, `lastHopQuality` | Only meaningful with `settings.stamina`/`settings.perf` enabled |
 | `landPunch`              | Downward view-punch offset from a hard landing, decays each tick (render-only, needs `settings.viewPunch`) |
 | `prevPos`/`currPos`, `prevEye`/`currEye` | Per-tick snapshots for render interpolation between fixed steps |
 
@@ -179,10 +180,11 @@ const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a br
 | `viewPunch` | `false` | Enables `landPunch` on hard landings |
 | `crosshair` | see below | Crosshair render settings — cosmetic only, the sim ignores them |
 | `stamina` | see below | CS2-style stamina pool, **disabled by default** |
+| `perf` | see below | Perfect-bhop velocity carry, **disabled by default** |
 
-`crosshair` and `stamina` are nested objects (`CrosshairSettings`,
-`StaminaSettings` — all exported if you want to type your own UI against
-them).
+`crosshair`, `stamina`, and `perf` are nested objects (`CrosshairSettings`,
+`StaminaSettings`, `PerfSettings` — all exported if you want to type your own
+UI against them).
 
 ### Bunnyhopping modes
 
@@ -212,11 +214,55 @@ are back on the floor. Surfing is unaffected either way, since it never
 runs through `walkMove` — riding a ramp is expected to exceed run speed;
 that's the whole point of surf.
 
-Landing and jumping again never "retains" or carries speed forward either —
-`bhopSpeedClamp` (above) is the only speed limit a takeoff gets, judged
-fresh every single time against whatever your current speed is, win or lose
-no matter how a hop was timed. There's no separate bhop-assist bonus layered
-on top of it.
+Landing and jumping again doesn't "retain" or carry speed forward by
+itself — `bhopSpeedClamp` (above) is the only speed limit a takeoff gets by
+default, judged fresh every time. `perf` (below) is the one, narrow
+exception.
+
+### Perf — perfect-bhop velocity carry
+
+```ts
+interface PerfSettings {
+  enabled: boolean;     // default false
+  maxAirSpeed: number;  // default 390 — asymptotic ceiling air speed approaches, observed on nopre chasemod servers
+}
+```
+
+A "perfect bhop" is a real, skill-timed **instant** rejump — manual input,
+the tick right after landing, nothing else. When one happens, your takeoff
+velocity is restored to exactly what you landed with (`player.landingVelocity`),
+bypassing whatever `bhopSpeedClamp` or ground friction had already reduced
+it to. `player.lastHopQuality` (`'perfect' | 'normal' | null`) reports which
+one just happened — flash a HUD element off it, drive an audio cue,
+whatever you like.
+
+Nothing else qualifies, ever:
+
+- **A rejump even one tick late** gets nothing — no partial credit for a
+  near-miss. The takeoff is left at whatever `bhopSpeedClamp` computed.
+- **`autobhop` never gets the carry.** Held-jump autobhop always re-fires
+  the instant it's able to, regardless of skill — treating that as a
+  guaranteed "perfect" every hop would permanently defeat `bhopSpeedClamp`,
+  since the carry would restore whatever you landed with every single time
+  and the clamp would never get a tick to actually hold speed down.
+- **A landing that came off a surf ramp never counts**, even on an
+  otherwise-instant rejump. Surfing (`player.surfing`) lets you build as
+  much speed as you want, completely uncapped, and that stays true for the
+  rest of the flight even after you leave the ramp — but it's never
+  something you "cash in" as a perfect bhop. The very next jump after such
+  a landing is judged as an ordinary takeoff instead.
+- **The very first jump of a life** (or since `respawn()`) never carries —
+  gravity settling you onto the ground you spawned on looks identical to a
+  timed landing, so without this check your first jump could carry a
+  "landing velocity" that was never really earned.
+
+Chaining perfect carries with real air-strafe technique otherwise climbs
+indefinitely, so whenever `enabled`, air speed itself is squeezed every
+airborne tick (`AirMove.ts`, not just at the carry) through a
+diminishing-returns curve that approaches `maxAirSpeed` instead of a hard
+clamp: speeds at or below it are untouched, and gains shrink the further
+past it a chain pushes. Surfing — and anything carried from it, until your
+next real landing — is exempt from this squeeze entirely.
 
 ### Stamina
 
@@ -313,13 +359,14 @@ feature's own tunables: `FRICTION`/`STOP_SPEED`, `ACCELERATE`,
 `NON_JUMP_VELOCITY`/`GROUND_TRACE_DIST`, `M_YAW`/`PITCH_CLAMP`
 
 **Physics (pure functions)** — `applyFriction`, `accelerate`, `airAccelerate`,
-`clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`
+`clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`,
+`applyAirSpeedCeiling`
 
 **Collision** — `Plane`, `Brush`, `LadderVolume`, `TraceResult`,
 `brushFromAABB`, `brushFromOrientedBox`, `traceBox`, `boxInBrush`, `World`
 
 **Settings** — `Settings`, `CrosshairSettings`, `StaminaSettings`,
-`DEFAULT_SETTINGS`, `loadSettings`, `saveSettings`
+`PerfSettings`, `DEFAULT_SETTINGS`, `loadSettings`, `saveSettings`
 
 **Player** — `PlayerController`, `PlayerOptions`
 

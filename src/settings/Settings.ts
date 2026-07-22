@@ -7,7 +7,7 @@
 import { DEFAULT_SETTINGS } from './Settings.config.js';
 import type { Settings } from './Settings.types.js';
 
-export type { CrosshairSettings, StaminaSettings, Settings } from './Settings.types.js';
+export type { CrosshairSettings, StaminaSettings, PerfSettings, Settings } from './Settings.types.js';
 export { DEFAULT_SETTINGS } from './Settings.config.js';
 
 // v2: defaults moved to nopre-KZ tuning (airaccelerate 100, takeoff clamp).
@@ -23,6 +23,7 @@ export function loadSettings(): Settings {
       ...parsed,
       crosshair: { ...DEFAULT_SETTINGS.crosshair, ...(parsed.crosshair ?? {}) },
       stamina: { ...DEFAULT_SETTINGS.stamina, ...(parsed.stamina ?? {}) },
+      perf: { ...DEFAULT_SETTINGS.perf, ...(parsed.perf ?? {}) },
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
