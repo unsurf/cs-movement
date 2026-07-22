@@ -8,7 +8,6 @@ import { CROUCH_SPEED, DEFAULT_TICK_RATE, RUN_SPEED, WALK_SPEED } from '../const
 import { M_YAW } from '../player/MouseInput/MouseInput.config.js';
 import { AIR_ACCELERATE } from '../physics/AirAccelerate/AirAccelerate.config.js';
 import { DEFAULT_STAMINA_SETTINGS } from '../physics/Stamina/Stamina.config.js';
-import { DEFAULT_PERF_SETTINGS } from '../physics/PerfBonus/PerfBonus.config.js';
 import type { Settings } from './Settings.types.js';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,5 +36,4 @@ export const DEFAULT_SETTINGS: Settings = {
     tStyle: false,
   },
   stamina: { ...DEFAULT_STAMINA_SETTINGS },
-  perf: { ...DEFAULT_PERF_SETTINGS },
 };

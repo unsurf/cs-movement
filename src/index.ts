@@ -22,7 +22,6 @@ export * from './physics/AirAccelerate/AirAccelerate.config.js';
 export * from './physics/ClipVelocity/ClipVelocity.js';
 export * from './physics/ClipVelocity/ClipVelocity.config.js';
 export * from './physics/Stamina/Stamina.js';
-export * from './physics/PerfBonus/PerfBonus.js';
 export * from './physics/Collision/Collision.js';
 export * from './physics/Collision/Collision.config.js';
 export * from './physics/World/World.js';

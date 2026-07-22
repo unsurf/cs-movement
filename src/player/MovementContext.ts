@@ -35,8 +35,6 @@ export interface MovementContext {
   readonly settings: Settings;
   /** Called on anomalies (unstuck pops, velocity kills). */
   readonly log: (msg: string) => void;
-  /** Source for the autobhop perf-chance roll. */
-  readonly rng: () => number;
 
   origin: Vec3;
   velocity: Vec3;
@@ -59,19 +57,12 @@ export interface MovementContext {
 
   /** 0..settings.stamina.max; only meaningful while settings.stamina.enabled. */
   stamina: number;
-  /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
-  lastHopQuality: 'perfect' | 'grey' | 'normal' | null;
 
   readonly input: InputState;
 
   oldJump: boolean; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off
   fallVelocity: number;
-  groundTicksSinceLanding: number; // ground-friction ticks elapsed since landing
-  /** True once a real jump (via checkJump) has ever launched this life — gates perf/hop-quality. */
-  hasJumpedBefore: boolean;
-  /** Horizontal velocity snapshotted the instant of the last landing; see PerfBonus. */
-  landingVelocity: Vec3;
   stuckTicks: number;
   blockedTicks: number;
   contactsThisTick: string[];

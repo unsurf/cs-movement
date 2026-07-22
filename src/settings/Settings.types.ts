@@ -5,9 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { StaminaSettings } from '../physics/Stamina/Stamina.types.js';
-import type { PerfSettings } from '../physics/PerfBonus/PerfBonus.types.js';
 
-export type { StaminaSettings, PerfSettings };
+export type { StaminaSettings };
 
 export interface CrosshairSettings {
   color: string;
@@ -31,10 +30,10 @@ export interface Settings {
    * "nopre": air-strafe/prestrafe speed gain (see airAccelerate) is left
    * completely unrestricted — this does NOT cap AirMove. Instead it puts a
    * hard ceiling on GROUND speed at the player's current max speed: land
-   * with more than that (from prestrafing, a bhop chain, a perf-bonus
-   * takeoff, ...) and walkMove clamps it down the moment you're grounded and
-   * moving under your own power. You can still build wild air speed for
-   * style/tech; you just can't cash it in as a permanent ground sprint.
+   * with more than that (from prestrafing, an uncapped bhop chain, ...) and
+   * walkMove clamps it down the moment you're grounded and moving under your
+   * own power. You can still build wild air speed for style/tech; you just
+   * can't cash it in as a permanent ground sprint.
    */
   noPrestrafe: boolean;
   airAccelerate: number;
@@ -47,5 +46,4 @@ export interface Settings {
   viewPunch: boolean;
   crosshair: CrosshairSettings;
   stamina: StaminaSettings;
-  perf: PerfSettings;
 }

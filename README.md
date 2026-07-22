@@ -112,7 +112,6 @@ new PlayerController(world: World, settings: Settings, spawn: Vec3, opts?: Playe
 ```ts
 interface PlayerOptions {
   log?: (msg: string) => void; // anomalies: unstuck pops, blocked-move velocity kills
-  rng?: () => number;          // source for the autobhop perf-chance roll; inject for deterministic tests
 }
 ```
 
@@ -126,11 +125,10 @@ Read these each frame to render:
 | `ducked`, `duckFrac`     | Duck state and 0→1 eye-height lerp progress                     |
 | `surfing`                | True while riding a steep-but-standable-adjacent slope           |
 | `onLadder`                | The `LadderVolume` currently gripped, or `null`                 |
-| `landingVelocity`         | Horizontal velocity snapshotted the instant of the last landing (see `perf`) |
 | `horizontalSpeed`        | Getter: `length2D(velocity)` — the number CS players actually watch |
 | `eyeHeight`              | Getter: lerped eye height for the current duck state             |
 | `mins`, `maxs`           | Getters: the current (stand or duck) hull extents                |
-| `stamina`, `lastHopQuality` | Only meaningful with `settings.stamina`/`settings.perf` enabled |
+| `stamina`                | Only meaningful with `settings.stamina` enabled                  |
 | `landPunch`              | Downward view-punch offset from a hard landing, decays each tick (render-only, needs `settings.viewPunch`) |
 | `prevPos`/`currPos`, `prevEye`/`currEye` | Per-tick snapshots for render interpolation between fixed steps |
 
@@ -181,11 +179,10 @@ const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a br
 | `viewPunch` | `false` | Enables `landPunch` on hard landings |
 | `crosshair` | see below | Crosshair render settings — cosmetic only, the sim ignores them |
 | `stamina` | see below | CS2-style stamina pool, **disabled by default** |
-| `perf` | see below | Real bhop-assist velocity carry, **disabled by default** |
 
-`crosshair`, `stamina`, and `perf` are nested objects (`CrosshairSettings`,
-`StaminaSettings`, `PerfSettings` — all exported if you want to type your own
-UI against them).
+`crosshair` and `stamina` are nested objects (`CrosshairSettings`,
+`StaminaSettings` — all exported if you want to type your own UI against
+them).
 
 ### Bunnyhopping modes
 
@@ -208,74 +205,18 @@ What `noPrestrafe: true` (the default) changes is what happens once you're
 back on the ground: `walkMove` puts a hard ceiling on ground speed at the
 player's current max speed (run/walk/crouch), full stop, the moment they're
 grounded and moving under their own power. Land with more than that — from
-prestrafing, an uncapped bhop chain, a `perf` takeoff bonus — and it gets
-clamped down instead of persisting as a permanent ground sprint. You can
-still fly through the air fast for style or technique; you just can't keep
-that speed once your feet are back on the floor. Surfing is unaffected
-either way, since it never runs through `walkMove` — riding a ramp is
-expected to exceed run speed; that's the whole point of surf.
+prestrafing or an uncapped bhop chain — and it gets clamped down instead of
+persisting as a permanent ground sprint. You can still fly through the air
+fast for style or technique; you just can't keep that speed once your feet
+are back on the floor. Surfing is unaffected either way, since it never
+runs through `walkMove` — riding a ramp is expected to exceed run speed;
+that's the whole point of surf.
 
-### Perf — real bhop-assist velocity carry
-
-```ts
-interface PerfSettings {
-  enabled: boolean;        // default false
-  maxBhopFrames: number;   // default 12 — ticks after landing a rejump can still carry velocity
-  framePenalty: number;    // default 0.975 — per-frame-late decay toward no carry
-  maxAirSpeed: number;     // default 390 — asymptotic ceiling a carry approaches, observed on nopre chasemod servers
-  autobhopChance: number;  // default 0.38 — per-hop chance of a carry under autobhop, observed on nopre chasemod servers
-}
-```
-
-This is the actual mechanic real bhop/chasemod SourceMod plugins run (e.g.
-`sm_realbhop`'s model), not a synthetic speed multiplier. On landing, your
-horizontal velocity is snapshotted into `player.landingVelocity`. Rejump
-within `maxBhopFrames` ticks (manual timing — not `autobhop`, see below) and
-your takeoff velocity blends back toward that snapshot:
-
-```
-velocity += (landingVelocity - velocity) * framePenalty ** framesTooLate
-```
-
-At 0 ticks late the weight is 1 — a full carry, restoring exactly what you
-had when you landed, even if `bhopSpeedClamp` or ground friction had already
-cut it down. That's a `'perfect'` hop. The weight decays every tick you
-wait, `'grey'` in between, and past `maxBhopFrames` nothing happens at all —
-a hard cutoff, not a taper — so the takeoff is left at whatever the vanilla
-clamp above already set it to. `player.lastHopQuality`
-(`'perfect' | 'grey' | 'normal' | null`) reports which one just happened —
-flash a HUD element off it, drive an audio cue, whatever you like.
-
-Held-jump `autobhop` always re-fires at 0 ticks late, so the frame-timing
-math above would treat every single hop as a guaranteed full carry — which
-permanently defeats `bhopSpeedClamp`: the carry would restore whatever you
-landed with every time, so the clamp never gets a tick to actually hold
-speed down (confirmed against real nopre servers — holding autobhop with
-the clamp on should float around baseline speed, not sit high). So under
-`autobhop`, each hop instead rolls `autobhopChance` for a full carry; on a
-miss, nothing happens and the takeoff is left at whatever `bhopSpeedClamp`
-already set it to. Unlike manual timing, this roll isn't gated by
-`maxBhopFrames` or recency — an isolated jump taken well after your last
-landing gets the same flat chance as an active chain, since there's no
-"how late" to measure when autobhop's timing is trivially always 0.
-
-Chaining hits with real air-strafe technique otherwise climbs indefinitely,
-so whenever `perf.enabled`, air speed itself is squeezed every airborne
-tick (`AirMove.ts`, not just at the carry) through a diminishing-returns
-curve that approaches `maxAirSpeed` instead of a hard clamp: speeds at or
-below it are untouched, and gains shrink the further past it you push.
-Surfing is exempt — riding a ramp's geometry is a different physics path
-and is meant to exceed this. (An earlier version only squeezed the carry at
-the takeoff instant; air-strafe gain between hops then pushed the
-*observed* ceiling well past `maxAirSpeed` — capping air speed continuously
-is what actually makes "never exceeds `maxAirSpeed`, unless surfing" true.)
-
-A manual-timing takeoff is only ever eligible for a carry if a real jump
-has already happened at some point before it, AND this takeoff is within
-`maxBhopFrames` of the last landing — otherwise it's unconditionally
-`'normal'`. Without the first check, gravity settling you onto the ground
-you spawned on looks identical to a timed landing, so your very first jump
-could carry a "landing velocity" that was never really earned.
+Landing and jumping again never "retains" or carries speed forward either —
+`bhopSpeedClamp` (above) is the only speed limit a takeoff gets, judged
+fresh every single time against whatever your current speed is, win or lose
+no matter how a hop was timed. There's no separate bhop-assist bonus layered
+on top of it.
 
 ### Stamina
 
@@ -292,10 +233,9 @@ interface StaminaSettings {
 
 A CS2-style fatigue pool: jumping and landing fill it, it drains back to 0
 over time, and while it's full-ish both ground speed and jump velocity are
-throttled by up to `maxPenalty`. Off by default — every bhop-focused preset,
-including `perf`, plays with this disabled, matching servers that zero the
-cvars out. Read `player.stamina` (`0..settings.stamina.max`) directly for a
-HUD meter.
+throttled by up to `maxPenalty`. Off by default — every bhop-focused preset
+plays with this disabled, matching servers that zero the cvars out. Read
+`player.stamina` (`0..settings.stamina.max`) directly for a HUD meter.
 
 ### Ducking
 
@@ -356,9 +296,6 @@ for (let i = 0; i < 512; i++) player.tick(1 / 128); // 4 seconds at 128 ticks/se
 console.log(player.horizontalSpeed); // ~250 — capped at runSpeed
 ```
 
-Inject `rng` in tests wherever you need the autobhop perf-chance roll to be
-deterministic instead of `Math.random`.
-
 ## API reference
 
 Everything below is exported from the package root (`@unsurf/cs-movement`).
@@ -376,14 +313,13 @@ feature's own tunables: `FRICTION`/`STOP_SPEED`, `ACCELERATE`,
 `NON_JUMP_VELOCITY`/`GROUND_TRACE_DIST`, `M_YAW`/`PITCH_CLAMP`
 
 **Physics (pure functions)** — `applyFriction`, `accelerate`, `airAccelerate`,
-`clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`,
-`bhopCarryWeight`
+`clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`
 
 **Collision** — `Plane`, `Brush`, `LadderVolume`, `TraceResult`,
 `brushFromAABB`, `brushFromOrientedBox`, `traceBox`, `boxInBrush`, `World`
 
 **Settings** — `Settings`, `CrosshairSettings`, `StaminaSettings`,
-`PerfSettings`, `DEFAULT_SETTINGS`, `loadSettings`, `saveSettings`
+`DEFAULT_SETTINGS`, `loadSettings`, `saveSettings`
 
 **Player** — `PlayerController`, `PlayerOptions`
 
