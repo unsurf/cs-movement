@@ -68,6 +68,8 @@ export interface MovementContext {
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off
   fallVelocity: number;
   groundTicksSinceLanding: number; // ground-friction ticks elapsed since landing
+  /** True once a real jump (via checkJump) has ever launched this life — gates perf/hop-quality. */
+  hasJumpedBefore: boolean;
   stuckTicks: number;
   blockedTicks: number;
   contactsThisTick: string[];

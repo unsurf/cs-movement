@@ -31,7 +31,16 @@ export function checkJump(ctx: MovementContext): void {
 
   if (ctx.settings.perf.enabled) {
     let bonus: number;
-    if (ctx.settings.autobhop) {
+    if (!ctx.hasJumpedBefore) {
+      // Perf/hop-quality is a rejump-timing reward — it can't apply to a
+      // jump with no previous jump to chain from. Without this, gravity
+      // settling you onto the ground you spawned on (which resets
+      // groundTicksSinceLanding to 0 exactly like a real landing) makes your
+      // very first jump look like an instant rejump, and autobhop's chance
+      // roll doesn't check landing history at all.
+      ctx.lastHopQuality = 'normal';
+      bonus = 0;
+    } else if (ctx.settings.autobhop) {
       // Autobhop always re-fires on the earliest possible tick, so the
       // tick-based classification below would always read 'perfect' — a
       // guaranteed buff, not a bonus. Roll a chance instead.
@@ -55,4 +64,5 @@ export function checkJump(ctx: MovementContext): void {
   }
   ctx.velocity.y = jumpVelocity;
   ctx.onGround = false;
+  ctx.hasJumpedBefore = true;
 }

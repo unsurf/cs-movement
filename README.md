@@ -229,6 +229,14 @@ buff, not a bonus. So under `autobhop`, each hop instead rolls
 (`'perfect' | 'grey' | 'normal' | null`) reports which one just happened —
 flash a HUD element off it, drive an audio cue, whatever you like.
 
+A takeoff is only ever eligible for `'perfect'`/`'grey'` if a real jump has
+already happened at some point before it — the very first jump of a life
+(or since `respawn()`) is always `'normal'`, in both modes. Otherwise,
+gravity settling you onto the ground you spawned on looks identical to a
+timed landing, so that first jump could get misclassified as an instant
+rejump (guaranteed "perfect" under manual timing, an undeserved chance at
+it under autobhop) despite there being no previous jump to chain from.
+
 ### Stamina
 
 ```ts

@@ -87,6 +87,11 @@ export class PlayerController implements MovementContext {
   ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
   fallVelocity = 0;
   groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
+  // Gravity settling you onto the ground you spawned on isn't a jump landing
+  // — this only flips true the moment checkJump actually launches a real
+  // jump, so perf/hop-quality can never fire on a jump with no previous jump
+  // to chain from (see Jump.ts).
+  hasJumpedBefore = false;
   stuckTicks = 0;
   blockedTicks = 0;
   contactsThisTick: string[] = [];
@@ -183,6 +188,7 @@ export class PlayerController implements MovementContext {
     this.ducked = false;
     this.stamina = 0;
     this.groundTicksSinceLanding = 0;
+    this.hasJumpedBefore = false;
     this.lastHopQuality = null;
   }
 

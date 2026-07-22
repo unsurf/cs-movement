@@ -40,6 +40,16 @@ function run(player: PlayerController, ticks: number): void {
   for (let i = 0; i < ticks; i++) player.tick(DT);
 }
 
+/** Takes one jump and rides it back to the ground, purely to satisfy
+ * hasJumpedBefore so a subsequent takeoff is eligible for perf classification
+ * at all — the very first jump of a life never is (see Jump.ts). */
+function primeWithOneJump(player: PlayerController): void {
+  player.input.jump = true;
+  run(player, 1);
+  player.input.jump = false;
+  while (!player.onGround) run(player, 1);
+}
+
 /**
  * Takes one hop, waits until grounded again, then waits `delayTicks` more
  * ground ticks (each bleeding a little speed to friction) before rejumping.
@@ -114,6 +124,7 @@ describe('perf bonus under autobhop: chance-based instead of guaranteed', () => 
     const hits = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.1 });
     hits.input.forward = true;
     run(hits, 64);
+    primeWithOneJump(hits); // the very first jump ever can't roll perfect — see below
     hits.input.jump = true;
     run(hits, 1);
     expect(hits.lastHopQuality).toBe('perfect');
@@ -121,6 +132,7 @@ describe('perf bonus under autobhop: chance-based instead of guaranteed', () => 
     const misses = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0.9 });
     misses.input.forward = true;
     run(misses, 64);
+    primeWithOneJump(misses);
     misses.input.jump = true;
     run(misses, 1);
     expect(misses.lastHopQuality).toBe('normal');
@@ -137,6 +149,7 @@ describe('perf bonus under autobhop: chance-based instead of guaranteed', () => 
       const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng });
       player.input.forward = true;
       run(player, 64);
+      primeWithOneJump(player);
       const before = player.horizontalSpeed;
       player.input.jump = true;
       run(player, 1);
@@ -145,6 +158,23 @@ describe('perf bonus under autobhop: chance-based instead of guaranteed', () => 
 
     expect(speedRatio(() => 0.1)).toBeCloseTo(1.3, 2);
     expect(speedRatio(() => 0.9)).toBeCloseTo(1.0, 2);
+  });
+
+  it('a jump with no prior jump to chain from is never perfect/grey, no matter how favorable the rng', () => {
+    // Regression: gravity settling the player onto the ground they spawned
+    // on used to look exactly like a landing eligible for hop-chain timing,
+    // so the very first jump of a life could roll (or, under manual timing,
+    // always got classified as) perfect despite there being no previous
+    // jump to chain from.
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, greyWindowTicks: 4, bonusFactor: 0.2, autobhopChance: 0.42 },
+    });
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0), { rng: () => 0 }); // always "wins" the roll
+    run(player, 64); // settle onto the ground — not a jump landing
+    player.input.jump = true;
+    run(player, 1); // the very first jump
+    expect(player.lastHopQuality).toBe('normal');
   });
 
   it('over many jumps, the perfect rate roughly tracks autobhopChance', () => {
