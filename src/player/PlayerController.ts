@@ -31,6 +31,12 @@ import { checkStuck } from './StuckCheck/StuckCheck.js';
 import { detectBlockedMove } from './BlockedMove/BlockedMove.js';
 import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
 
+// A wheel notch has no keyup of its own, so a bound "mwheelup"/"mwheeldown"
+// +jump has to synthesize a release — long enough for at least one physics
+// tick (128 tick = ~7.8ms) to observe it pressed, short enough to still feel
+// instantaneous.
+const WHEEL_JUMP_PULSE_MS = 50;
+
 /** Optional host hooks. Movement never logs or touches globals on its own. */
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
@@ -167,6 +173,27 @@ export class PlayerController implements MovementContext {
       const action = keyMap[e.code];
       if (action) this.input[action] = false;
     });
+
+    // bind "mwheelup" "+jump" / "mwheeldown" "+jump": the standard chasemod
+    // bind, alongside space rather than instead of it. A wheel notch has no
+    // keyup of its own — it's a single instantaneous pulse — so press it,
+    // then release after a pulse long enough for at least one tick to see it
+    // (overlapping notches within that window just re-arm the same pulse,
+    // which is exactly "only the first pulse this tick counts").
+    let wheelJumpRelease = 0;
+    window.addEventListener(
+      'wheel',
+      (e) => {
+        if (document.pointerLockElement !== target || e.deltaY === 0) return;
+        this.input.jump = true;
+        window.clearTimeout(wheelJumpRelease);
+        wheelJumpRelease = window.setTimeout(() => {
+          this.input.jump = false;
+        }, WHEEL_JUMP_PULSE_MS);
+        e.preventDefault();
+      },
+      { passive: false },
+    );
 
     const { onPointerLockChange, onMouseMove } = createMouseInputHandlers(this);
     document.addEventListener('pointerlockchange', onPointerLockChange);

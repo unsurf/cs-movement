@@ -16,3 +16,18 @@ export function bhopCarryWeight(framesTooLate: number, maxBhopFrames: number, fr
   if (framesTooLate < 0 || framesTooLate > maxBhopFrames) return 0;
   return framePenalty ** framesTooLate;
 }
+
+/**
+ * Squeezes a speed above `ceiling` asymptotically toward it, so chaining
+ * more perfect hops keeps gaining a little rather than compounding without
+ * limit — diminishing returns instead of a hard clamp. Speeds at or below
+ * `ceiling` pass through untouched; `softness` controls how gradually the
+ * curve approaches the ceiling (the true asymptote sits `softness` units
+ * above it, which is deliberate — an exact hard ceiling would just be
+ * `bhopSpeedClamp` again).
+ */
+export function applyAirSpeedCeiling(speed: number, ceiling: number, softness: number): number {
+  if (speed <= ceiling) return speed;
+  const excess = speed - ceiling;
+  return ceiling + softness * (1 - Math.exp(-excess / softness));
+}

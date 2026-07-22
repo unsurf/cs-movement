@@ -25,7 +25,7 @@ describe('PlayerController mouse input', () => {
     originalWindow = (globalThis as Record<string, unknown>).window;
     target = {};
     const doc = Object.assign(new EventTarget(), { pointerLockElement: target });
-    const win = new EventTarget();
+    const win = Object.assign(new EventTarget(), { setTimeout, clearTimeout });
     (globalThis as Record<string, unknown>).document = doc;
     (globalThis as Record<string, unknown>).window = win;
   });
@@ -55,5 +55,19 @@ describe('PlayerController mouse input', () => {
 
     move(410, 0); // legitimate continuation of the same fast turn
     expect(player.yaw).not.toBe(yawAfterBaseline);
+  });
+
+  it('mwheelup/mwheeldown pulse +jump for one tick, then release it themselves', async () => {
+    const player = new PlayerController(makeWorld(), { ...DEFAULT_SETTINGS }, vec3(0, 0, 0));
+    player.bindInput(target as HTMLElement);
+
+    expect(player.input.jump).toBe(false);
+    const wheel = new Event('wheel', { cancelable: true }) as Event & { deltaY: number };
+    wheel.deltaY = 100;
+    (globalThis as unknown as { window: EventTarget }).window.dispatchEvent(wheel);
+    expect(player.input.jump).toBe(true); // instantaneous pulse, no keydown needed
+
+    await new Promise((resolve) => setTimeout(resolve, 80)); // past the synthesized pulse
+    expect(player.input.jump).toBe(false); // released itself — no keyup event exists for a wheel notch
   });
 });

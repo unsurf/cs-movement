@@ -141,6 +141,14 @@ player.tickHistoryText(): string  // last 384 ticks as one string, for bug repor
 player.bindInput(target: HTMLElement): void // browser only: WASD/Space/Shift/Ctrl/C/R + pointer-lock mouse look
 ```
 
+`bindInput` also wires up the standard chasemod `bind "mwheelup" "+jump"` /
+`bind "mwheeldown" "+jump"` — alongside space, not instead of it. A wheel
+notch has no keyup of its own, so it's modeled as a single instantaneous
+`input.jump` pulse (long enough for at least one tick to see it, released
+automatically after) rather than a held key: scrolling fast enough to fire
+two notches in the same tick just re-arms the same pulse, so only the first
+one that tick actually does anything.
+
 `player.input` (`forward`/`back`/`left`/`right`/`jump`/`duck`/`walk`/`reset`)
 is a plain mutable object — drive it yourself for AI, replays, or a custom
 input scheme instead of calling `bindInput`.
@@ -213,6 +221,7 @@ interface PerfSettings {
   enabled: boolean;        // default false
   maxBhopFrames: number;   // default 12 — ticks after landing a rejump can still carry velocity
   framePenalty: number;    // default 0.975 — per-frame-late decay toward no carry
+  maxAirSpeed: number;     // default 390 — asymptotic ceiling a carry approaches, observed on nopre chasemod servers
 }
 ```
 
@@ -238,6 +247,16 @@ flash a HUD element off it, drive an audio cue, whatever you like.
 There's no separate mode for `autobhop`: held jump always re-fires at 0
 ticks late, so a genuine chain is deterministically always `'perfect'` —
 autobhop is easy mode, not a coin flip, exactly like a real assisted server.
+
+The carry alone compounds without limit — chaining perfect hops with real
+air-strafe technique otherwise climbs indefinitely. Whenever a carry
+actually happens, the resulting speed is squeezed through a
+diminishing-returns curve that approaches `maxAirSpeed` instead of a hard
+clamp: speeds at or below it are untouched, and gains shrink the further
+past it a chain pushes. The squeeze only fires at the takeoff instant, not
+continuously while airborne, so real air-strafe gain between hops can still
+push the *observed* ceiling somewhat above `maxAirSpeed` itself — that's a
+tunable approximation of a real server's feel, not an exact guarantee.
 
 A takeoff is only ever eligible for a carry if a real jump has already
 happened at some point before it, AND this takeoff is within

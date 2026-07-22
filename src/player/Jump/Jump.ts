@@ -4,7 +4,9 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-import { bhopCarryWeight } from '../../physics/PerfBonus/PerfBonus.js';
+import { length2D } from '../../math/vec3.js';
+import { AIR_SPEED_CEILING_SOFTNESS } from '../../physics/PerfBonus/PerfBonus.config.js';
+import { applyAirSpeedCeiling, bhopCarryWeight } from '../../physics/PerfBonus/PerfBonus.js';
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
 import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
@@ -45,6 +47,18 @@ export function checkJump(ctx: MovementContext): void {
     if (weight > 0) {
       ctx.velocity.x += (ctx.landingVelocity.x - ctx.velocity.x) * weight;
       ctx.velocity.z += (ctx.landingVelocity.z - ctx.velocity.z) * weight;
+
+      // The carry alone compounds without limit across a chain; real
+      // chasemod servers top out around maxAirSpeed in practice. Squeeze
+      // toward that ceiling with diminishing returns rather than a hard cap.
+      const carriedSpeed = length2D(ctx.velocity);
+      const cappedSpeed = applyAirSpeedCeiling(carriedSpeed, ctx.settings.perf.maxAirSpeed, AIR_SPEED_CEILING_SOFTNESS);
+      if (cappedSpeed < carriedSpeed) {
+        const scale = cappedSpeed / carriedSpeed;
+        ctx.velocity.x *= scale;
+        ctx.velocity.z *= scale;
+      }
+
       ctx.lastHopQuality = framesTooLate <= 0 ? 'perfect' : 'grey';
     } else {
       ctx.lastHopQuality = 'normal';

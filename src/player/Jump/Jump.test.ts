@@ -126,7 +126,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9 },
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000 }, // effectively no ceiling here
     });
     expect(delayedRejump(settings, 0)).toBe('perfect');
     expect(delayedRejump(settings, 2)).toBe('grey');
@@ -138,7 +138,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     const settings = makeSettings({
       autobhop: false,
       bhopSpeedClamp: false,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9 },
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.9, maxAirSpeed: 10000 }, // effectively no ceiling here
     });
 
     const perfect = prestrafeLandThenRejump(settings, 0);
@@ -166,7 +166,7 @@ describe('perf: real bhop-assist velocity carry (opt-in, disabled by default)', 
     // so the very first jump of a life could still carry a "landing
     // velocity" that was never really earned.
     const settings = makeSettings({
-      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975 },
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000 },
     });
     const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
     run(player, 64); // settle onto the ground — not a jump landing
@@ -180,7 +180,7 @@ describe('perf under autobhop: deterministic, not a coin flip', () => {
   it('held jump always re-fires at 0 frames late, so a real chain is always perfect', () => {
     const settings = makeSettings({
       autobhop: true,
-      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975 },
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 10000 }, // no ceiling here — see the dedicated ceiling test below
     });
     const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
     player.input.jump = true; // held the whole time, like a real player bhopping
@@ -202,13 +202,51 @@ describe('perf under autobhop: deterministic, not a coin flip', () => {
     expect(sawNonPerfectAfterFirstHop).toBe(false);
   });
 
+  it('a long perfect chain with real air-strafing converges to a stable ceiling instead of compounding forever', () => {
+    // Regression: the carry alone compounds without limit — chaining
+    // perfect hops with genuine air-strafe technique previously reached
+    // ~1140 u/s in this exact scenario and was still climbing, bounded only
+    // by the test world's floor running out, not by any ceiling in the
+    // physics. The squeeze only fires at each takeoff, not continuously
+    // while airborne, so the actual equilibrium settles somewhat above
+    // maxAirSpeed itself (the per-hop air-strafe gain has to be out-paced by
+    // the squeeze for an equilibrium to exist at all) — the property this
+    // guards is convergence, not landing on maxAirSpeed exactly.
+    const settings = makeSettings({
+      autobhop: true,
+      perf: { enabled: true, maxBhopFrames: 12, framePenalty: 0.975, maxAirSpeed: 390 },
+    });
+    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
+    player.input.right = true;
+    player.input.jump = true;
+    const landingSpeeds: number[] = [];
+    for (let i = 0; i < 20000; i++) {
+      const wasGrounded = player.onGround;
+      if (!wasGrounded) player.yaw -= 3; // continuous air-strafe technique
+      run(player, 1);
+      if (!wasGrounded && player.onGround) landingSpeeds.push(player.horizontalSpeed);
+    }
+    expect(landingSpeeds.length).toBeGreaterThan(50); // sanity: this genuinely chained many hops
+    const firstHalf = landingSpeeds.slice(0, Math.floor(landingSpeeds.length / 2));
+    const secondHalf = landingSpeeds.slice(Math.floor(landingSpeeds.length / 2));
+    const maxFirstHalf = Math.max(...firstHalf);
+    const maxSecondHalf = Math.max(...secondHalf);
+    expect(maxFirstHalf).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // sanity: a real chain happened
+    // Converges: the back half of a long chain isn't meaningfully faster
+    // than the front half. An uncapped chain keeps climbing throughout.
+    expect(maxSecondHalf).toBeLessThan(maxFirstHalf + 5);
+    // Nowhere near the ~1140 (and still climbing) an uncapped chain reached
+    // in this exact scenario.
+    expect(maxSecondHalf).toBeLessThan(700);
+  });
+
   it('an isolated jump taken long after the last landing is never perfect/grey, even under autobhop', () => {
     // Being "in autobhop mode" isn't the same as "currently mid-chain": a
     // single deliberate jump taken well after landing (walking around
     // normally, not bhopping) must not carry anything.
     const settings = makeSettings({
       autobhop: true,
-      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.975 },
+      perf: { enabled: true, maxBhopFrames: 4, framePenalty: 0.975, maxAirSpeed: 10000 },
     });
     const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
     primeWithOneJump(player); // satisfies hasJumpedBefore

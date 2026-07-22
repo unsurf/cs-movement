@@ -1,6 +1,6 @@
 {
   "name": "@unsurf/cs-movement",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Counter-Strike / Source-engine movement physics: bhop, surf, air-strafing, ladders, and plane-based brush collision. Renderer-agnostic, zero runtime dependencies.",
   "keywords": [
     "counter-strike",
