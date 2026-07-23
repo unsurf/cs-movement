@@ -31,12 +31,6 @@ import { checkStuck } from './StuckCheck/StuckCheck.js';
 import { detectBlockedMove } from './BlockedMove/BlockedMove.js';
 import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
 
-// A wheel notch has no keyup of its own, so a bound "mwheelup"/"mwheeldown"
-// +jump has to synthesize a release — long enough for at least one physics
-// tick (128 tick = ~7.8ms) to observe it pressed, short enough to still feel
-// instantaneous.
-const WHEEL_JUMP_PULSE_MS = 50;
-
 /** Optional host hooks. Movement never logs or touches globals on its own. */
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
@@ -89,6 +83,17 @@ export class PlayerController implements MovementContext {
   };
 
   oldJump = false; // was +jump held last tick (Source's pogo-stick check)
+  // Space is a real held key — input.jump should track it continuously.
+  // mwheelup/mwheeldown has no keyup of its own and, per Source's own
+  // command-frame batching, each notch is meant to register as exactly one
+  // tick's worth of "+jump" rather than a timed hold — see bindInput()'s
+  // wheel handler and tick()'s consumption of wheelJumpQueued below.
+  private keyJumpHeld = false;
+  private wheelJumpQueued = false;
+  // Only true once bindInput() has wired up real listeners — tick() must
+  // never touch input.jump on its own otherwise, since tests throughout this
+  // codebase drive it directly (player.input.jump = true) without binding.
+  private inputBound = false;
   ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
   fallVelocity = 0;
   groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
@@ -153,18 +158,23 @@ export class PlayerController implements MovementContext {
   // -- Input ----------------------------------------------------------------
 
   bindInput(target: HTMLElement): void {
+    this.inputBound = true;
     const keyMap: Record<string, keyof InputState | undefined> = {
       KeyW: 'forward',
       KeyS: 'back',
       KeyA: 'left',
       KeyD: 'right',
-      Space: 'jump',
       ShiftLeft: 'walk',
       ControlLeft: 'duck',
       KeyC: 'duck',
       KeyR: 'reset',
     };
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        this.keyJumpHeld = true;
+        e.preventDefault();
+        return;
+      }
       const action = keyMap[e.code];
       if (action) {
         this.input[action] = true;
@@ -172,27 +182,46 @@ export class PlayerController implements MovementContext {
       }
     });
     window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        this.keyJumpHeld = false;
+        return;
+      }
       const action = keyMap[e.code];
       if (action) this.input[action] = false;
     });
 
     // bind "mwheelup" "+jump" / "mwheeldown" "+jump": the standard chasemod
-    // bind, alongside space rather than instead of it. A wheel notch has no
-    // keyup of its own — it's a single instantaneous pulse — so press it,
-    // then release after a pulse long enough for at least one tick to see it
-    // (overlapping notches within that window just re-arm the same pulse,
-    // which is exactly "only the first pulse this tick counts").
-    let wheelJumpRelease = 0;
+    // bind, alongside space rather than instead of it. Scrolling the wheel
+    // through one physical motion (bottom notch to top notch) doesn't fire
+    // one 'wheel' event — it fires a rapid burst of a dozen-plus, each one a
+    // genuine, independent +jump/-jump pair. That's the whole mechanism
+    // behind chasemod wheel-bhop: spamming +jump repeatedly gives many
+    // independent chances for one press to land on the exact tick after a
+    // landing and catch a perfect rejump.
+    //
+    // A wall-clock timed pulse (tried here previously, twice) can't get this
+    // right: too long a pulse and consecutive notches merge into one
+    // continuous "held" state — which, exactly like holding spacebar down
+    // through a landing, fails the pogo-stick re-press check for real, not
+    // just in this sim; too short and a pulse can lapse between physics
+    // ticks depending on frame timing, silently eating the notch. Neither
+    // duration is really "correct" because milliseconds are the wrong unit
+    // — what actually matters is *ticks*, since that's what checkJump reads.
+    // So: a wheel event just queues a request; tick() consumes it as
+    // exactly one tick's worth of "+jump" and clears it immediately after,
+    // regardless of how much wall-clock time that request sat queued.
+    // Multiple events queued between two ticks (a whole burst arriving
+    // within one rendered frame) collapse into that same single tick's
+    // press — which matches Source's own per-command-frame batching, not a
+    // bug — while a fresh event arriving after the previous one was
+    // consumed re-arms a genuinely new press, so a spam spread across many
+    // ticks gets many independent chances, never one merged hold.
     window.addEventListener(
       'wheel',
       (e) => {
         if (document.pointerLockElement !== target || e.deltaY === 0) return;
-        this.input.jump = true;
-        window.clearTimeout(wheelJumpRelease);
-        wheelJumpRelease = window.setTimeout(() => {
-          this.input.jump = false;
-        }, WHEEL_JUMP_PULSE_MS);
         e.preventDefault();
+        this.wheelJumpQueued = true;
       },
       { passive: false },
     );
@@ -226,6 +255,14 @@ export class PlayerController implements MovementContext {
   tick(dt: number): void {
     copy(this.prevPos, this.currPos);
     this.prevEye = this.currEye;
+
+    // Space stays pressed for as long as it's physically held; a queued
+    // wheel notch is consumed for exactly this one tick and then gone,
+    // whether or not Space is also down — see bindInput()'s wheel handler.
+    if (this.inputBound) {
+      this.input.jump = this.keyJumpHeld || this.wheelJumpQueued;
+      this.wheelJumpQueued = false;
+    }
 
     if (this.input.reset) {
       this.input.reset = false;
