@@ -7,6 +7,10 @@ collision.
 Renderer-agnostic and **zero runtime dependencies** — no Three.js, no engine.
 You bring the geometry and the draw loop; this brings the feel.
 
+<p align="center"><a href="https://hns.unsurf.sh"><strong>Demo</strong></a></p>
+
+## What's in it
+
 - **Movement** — `sv_accelerate` / `sv_airaccelerate` / `sv_friction` faithful
   to CS:GO's cvars, the air-speed cap, the `sv_enablebunnyhopping 0` takeoff
   clamp, plus two opt-in extras: a real bhop-assist velocity carry (the
