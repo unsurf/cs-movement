@@ -1,14 +1,12 @@
-// Real Source's SetDuckedEyeOffset only ever writes the view/camera offset,
-// never the player's origin — and the default hull mins are identical
-// standing vs ducked, so ducking only lowers the hull's ceiling (maxs), not
-// its feet. That means ducking cannot change ground-collision timing in
-// real Source; a longjump's flight path is unaffected by duck on its own.
-//
-// CS:GO nonetheless measurably gives a duck-held longjump extra distance in
-// real play, and that mechanism lives in CS:GO's closed-source game
-// movement, not the public SDK. DUCK_LANDING_BONUS (Duck.config.ts) is a
-// labeled approximation of it, not a reverse-engineered mechanic — applied
-// once per flight, timing-invariant, regardless of when duck engages.
+// Ground duck stays instant (hull + duckFrac both flip/ramp the same as
+// before). Airborne duck flips the hull (ducked) instantly — a jump into a
+// gap only tall enough for the duck hull needs it right away — but the
+// origin.y "head stays put" compensation now ramps with duckFrac over
+// DUCK_LERP_TIME instead of shifting the full 18u in one tick. That's what
+// makes a duck thrown right before landing buy less extra hang time (and
+// less longjump distance) than one thrown early enough to fully complete —
+// the real CS:GO "duck at the very end" technique, not a fixed bonus
+// regardless of timing. See Duck.ts.
 
 import { describe, expect, it } from 'vitest';
 import { vec3 } from '../../math/vec3';
@@ -16,9 +14,10 @@ import { World } from '../../physics/World/World';
 import { brushFromAABB } from '../../physics/Collision/Collision';
 import { PlayerController } from '../PlayerController';
 import { DEFAULT_SETTINGS } from '../../settings/Settings';
-import { DUCK_LANDING_BONUS } from './Duck.config';
+import { DUCK_LERP_TIME } from './Duck.config';
 
 const DT = 1 / 128;
+const HULL_DELTA = 18; // HULL_STAND_HEIGHT - HULL_DUCK_HEIGHT
 
 function makeFloorWorld(): World {
   const world = new World();
@@ -26,68 +25,94 @@ function makeFloorWorld(): World {
   return world;
 }
 
-/** duckLeadTicks: ticks after takeoff before duck engages. 0 = same tick as jump. Infinity = never. */
-function longjumpDistance(duckLeadTicks: number): number {
-  const settings = structuredClone(DEFAULT_SETTINGS);
-  const player = new PlayerController(makeFloorWorld(), settings, vec3(0, 0, 0));
-  for (let i = 0; i < 5; i++) player.tick(DT);
-  for (let i = 0; i < 200; i++) {
-    player.input.forward = true;
+describe('ground duck', () => {
+  it('flips ducked instantly but still ramps duckFrac over DUCK_LERP_TIME', () => {
+    const player = new PlayerController(makeFloorWorld(), structuredClone(DEFAULT_SETTINGS), vec3(0, 5, 0));
+    for (let i = 0; i < 10; i++) player.tick(DT); // settle on the floor
+
+    player.input.duck = true;
     player.tick(DT);
-  }
-  const takeoffX = player.origin.x;
-  const takeoffZ = player.origin.z;
-  player.input.jump = true;
-  if (duckLeadTicks === 0) player.input.duck = true;
-  player.tick(DT);
-  player.input.jump = false;
+    expect(player.ducked).toBe(true);
+    expect(player.duckFrac).toBeGreaterThan(0);
+    expect(player.duckFrac).toBeLessThan(1);
 
-  let ticksAirborne = 0;
-  while (!player.onGround && ticksAirborne < 300) {
-    ticksAirborne++;
-    if (duckLeadTicks > 0 && ticksAirborne >= duckLeadTicks) player.input.duck = true;
-    player.tick(DT);
-  }
-  const dx = player.origin.x - takeoffX;
-  const dz = player.origin.z - takeoffZ;
-  return Math.hypot(dx, dz);
-}
-
-describe('airborne duck (no bonus)', () => {
-  it('does not move the origin — only the hull maxs (top) and ducked flag change', () => {
-    const settings = structuredClone(DEFAULT_SETTINGS);
-    const airborne = new PlayerController(new World(), settings, vec3(0, 500, 0));
-    const control = new PlayerController(new World(), settings, vec3(0, 500, 0));
-    airborne.tick(DT);
-    control.tick(DT);
-    expect(airborne.onGround).toBe(false);
-
-    airborne.input.duck = true;
-    airborne.tick(DT); // this tick is a straight-up drop: no horizontal speed, no bonus to apply
-    control.tick(DT); // identical fall, no duck
-
-    expect(airborne.ducked).toBe(true);
-    expect(airborne.origin.y).toBeCloseTo(control.origin.y, 6);
-    expect(airborne.origin.x).toBeCloseTo(control.origin.x, 6);
-    expect(airborne.origin.z).toBeCloseTo(control.origin.z, 6);
+    for (let i = 0; i < Math.ceil(DUCK_LERP_TIME / DT) + 2; i++) player.tick(DT);
+    expect(player.duckFrac).toBeCloseTo(1, 5);
   });
 });
 
-describe('DUCK_LANDING_BONUS (labeled approximation, see Duck.config.ts)', () => {
-  it('gives the identical longjump distance whether duck engages same-tick as jump, right after, mid-air, or late', () => {
-    const sameTick = longjumpDistance(0);
-    const rightAfter = longjumpDistance(1);
-    const midAir = longjumpDistance(40);
-    const late = longjumpDistance(90); // a handful of ticks before natural landing
+describe('airborne duck', () => {
+  it('flips the hull (ducked) instantly but ramps duckFrac gradually', () => {
+    const player = new PlayerController(new World(), structuredClone(DEFAULT_SETTINGS), vec3(0, 500, 0));
+    player.tick(DT);
+    expect(player.onGround).toBe(false);
 
-    expect(rightAfter).toBeCloseTo(sameTick, 1);
-    expect(midAir).toBeCloseTo(sameTick, 1);
-    expect(late).toBeCloseTo(sameTick, 1);
+    player.input.duck = true;
+    player.tick(DT);
+
+    expect(player.ducked).toBe(true); // hull collision: instant
+    expect(player.duckFrac).toBeGreaterThan(0);
+    expect(player.duckFrac).toBeLessThan(1); // origin/eye compensation: gradual
   });
 
-  it('adds exactly DUCK_LANDING_BONUS units over a no-duck jump', () => {
+  it("origin.y rise matches duckFrac's progress scaled by the hull delta, not a one-tick jump", () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    const control = new PlayerController(new World(), settings, vec3(0, 500, 0));
+    const ducked = new PlayerController(new World(), settings, vec3(0, 500, 0));
+    control.tick(DT);
+    ducked.tick(DT);
+    ducked.input.duck = true;
+
+    for (let i = 0; i < 20; i++) {
+      control.tick(DT);
+      ducked.tick(DT);
+      const originRise = ducked.origin.y - control.origin.y;
+      expect(originRise).toBeCloseTo(ducked.duckFrac * HULL_DELTA, 5);
+    }
+    // Sanity: this test actually caught the transition in progress at some
+    // point, not just before/after it — otherwise the assertion above is
+    // vacuously true at 0 and at duckFrac===1.
+    expect(ducked.duckFrac).toBeGreaterThan(0);
+    expect(ducked.duckFrac).toBeLessThan(1);
+  });
+
+  it('a duck held from well before landing completes fully; one thrown right at the end only partially completes', () => {
+    function longjumpDistance(duckLeadTicks: number): number {
+      const settings = structuredClone(DEFAULT_SETTINGS);
+      const player = new PlayerController(makeFloorWorld(), settings, vec3(0, 0, 0));
+      for (let i = 0; i < 5; i++) player.tick(DT);
+      for (let i = 0; i < 200; i++) {
+        player.input.forward = true;
+        player.tick(DT);
+      }
+      const takeoffX = player.origin.x;
+      const takeoffZ = player.origin.z;
+      player.input.jump = true;
+      player.tick(DT);
+      player.input.jump = false;
+
+      let ticksAirborne = 0;
+      const duckTick = duckLeadTicks; // ticks after takeoff to start ducking
+      while (!player.onGround && ticksAirborne < 300) {
+        ticksAirborne++;
+        if (ticksAirborne >= duckTick) player.input.duck = true;
+        player.tick(DT);
+      }
+      // yaw is 0 (forward = -z) by default — measure both axes so this
+      // doesn't silently break if that default ever changes.
+      const dx = player.origin.x - takeoffX;
+      const dz = player.origin.z - takeoffZ;
+      return Math.hypot(dx, dz);
+    }
+
     const noDuck = longjumpDistance(Infinity);
-    const ducked = longjumpDistance(0);
-    expect(ducked - noDuck).toBeCloseTo(DUCK_LANDING_BONUS, 1);
+    const duckEarly = longjumpDistance(1); // ducks almost immediately after takeoff
+    const duckLate = longjumpDistance(90); // ducks only a handful of ticks before landing
+
+    expect(duckEarly).toBeGreaterThan(noDuck);
+    expect(duckLate).toBeGreaterThan(noDuck);
+    // The whole point of the gradual ramp: an early duck completes fully and
+    // gains more distance than a late one that gets cut off by landing.
+    expect(duckEarly).toBeGreaterThan(duckLate);
   });
 });

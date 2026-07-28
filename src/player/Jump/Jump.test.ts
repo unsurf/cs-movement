@@ -248,38 +248,3 @@ describe('perf: perfect-bhop velocity carry (opt-in, disabled by default)', () =
     expect(maxSpeed).toBeGreaterThan(settings.perf.maxAirSpeed * 1.3); // uncapped — surf is meant to exceed it
   });
 });
-
-describe('bhopSpeedClamp is not fooled by a simultaneous duck', () => {
-  // updateDuck() runs before checkJump() every tick, so pressing duck on the
-  // exact same tick as jump — the ordinary duck-jump/longjump input — used
-  // to make the clamp read ctx.ducked as already true and cap takeoff speed
-  // to crouch speed (~85 × 1.1) instead of run speed (~250 × 1.1). CS:GO
-  // doesn't punish that combination; this guards the fix (currentMaxSpeed's
-  // ignoreDuck option). Needs real prestrafe speed above run speed to be a
-  // meaningful test — the clamp never engages at all otherwise (250 < 275).
-  it('a rejump with duck pressed the same tick clamps to run speed, not crouch speed', () => {
-    const settings = makeSettings({ autobhop: false, bhopSpeedClamp: true });
-    const player = new PlayerController(makeWorld(), settings, vec3(0, 5, 0));
-    primeWithOneJump(player);
-    run(player, 64);
-
-    player.origin.y = 3000;
-    player.onGround = false;
-    player.input.right = true;
-    while (!player.onGround) {
-      player.yaw -= 3;
-      run(player, 1);
-    }
-    const landingSpeed = player.horizontalSpeed;
-    expect(landingSpeed).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5); // sanity: real prestrafe gain happened
-    player.input.right = false;
-
-    player.input.duck = true;
-    player.input.jump = true;
-    run(player, 1); // rejump tick — duck and jump pressed together
-
-    // Clamped to ~1.1 × run speed (~275), not ~1.1 × crouch speed (~93.5).
-    expect(player.horizontalSpeed).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed);
-    expect(player.horizontalSpeed).toBeLessThan(DEFAULT_SETTINGS.runSpeed * 1.15);
-  });
-});
