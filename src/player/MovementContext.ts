@@ -50,6 +50,8 @@ export interface MovementContext {
   surfing: boolean;
   /** True from the moment surfing starts until the next real ground landing. */
   surfedSinceGrounded: boolean;
+  /** True once this flight's DUCK_LANDING_BONUS has been applied — one-shot per jump. */
+  duckBonusAppliedThisFlight: boolean;
 
   /** Position snapshot from the start of this tick, for blocked-move detection. */
   prevPos: Vec3;

@@ -35,6 +35,9 @@ export function categorizePosition(ctx: MovementContext): void {
     copy(ctx.origin, tr.endPos);
     if (wasAirborne) {
       ctx.groundTicksSinceLanding = 0;
+      // Landing ends the flight — the next one (jump or ledge walk-off)
+      // starts with its duck bonus (see Duck.ts) unearned again.
+      ctx.duckBonusAppliedThisFlight = false;
       // Only y gets clipped by the floor plane's normal this tick — x/z still
       // hold the actual speed the player landed with. Snapshot it now, before
       // walkMove's friction gets a chance to bleed it, so a perfect rejump

@@ -6,6 +6,7 @@
  */
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
 import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
+import { applyDuckLandingBonus } from '../Duck/Duck.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
@@ -20,9 +21,12 @@ export function checkJump(ctx: MovementContext): void {
   // (Source's PreventBunnyJumping), so hops don't compound speed. A
   // perfect-bhop carry (below) can restore more than this, but everything
   // else — a late rejump, autobhop, or a surf-derived landing — is left
-  // exactly here.
+  // exactly here. ignoreDuck: this tick's updateDuck() already ran, so a
+  // duck pressed simultaneously with jump (the ordinary duck-jump/longjump
+  // technique) must not be judged against crouch speed here — CS:GO doesn't
+  // punish that combination.
   if (ctx.settings.bhopSpeedClamp) {
-    const maxScaled = currentMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;
+    const maxScaled = currentMaxSpeed(ctx, { ignoreDuck: true }) * BHOP_MAX_SPEED_FACTOR;
     const speed = ctx.horizontalSpeed;
     if (speed > maxScaled) {
       const fraction = maxScaled / speed;
@@ -63,4 +67,10 @@ export function checkJump(ctx: MovementContext): void {
   // Starting a brand-new flight either way — any surf touch from before
   // this takeoff is no longer relevant to whatever happens next.
   ctx.surfedSinceGrounded = false;
+  // If duck was already active (held from before takeoff, or pressed the
+  // same tick as jump — updateDuck() runs earlier in the tick, before this
+  // point) the duck-jump bonus is earned right now, at the moment of
+  // leaving the ground. A duck that first engages later, mid-air, is
+  // handled by updateDuck() itself.
+  if (ctx.ducked) applyDuckLandingBonus(ctx);
 }
