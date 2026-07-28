@@ -21,7 +21,7 @@ import type { Settings } from '../settings/Settings.js';
 
 import { type InputState, type MovementContext } from './MovementContext.js';
 import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck/Duck.js';
-import { DUCK_LERP_TIME, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
+import { EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
 import { checkJump } from './Jump/Jump.js';
 import { walkMove } from './WalkMove/WalkMove.js';
@@ -270,7 +270,7 @@ export class PlayerController implements MovementContext {
     }
 
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
-    updateDuck(this);
+    updateDuck(this, dt);
     if (this.settings.stamina.enabled) {
       this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, this.settings.stamina.max, dt);
     }
@@ -299,11 +299,6 @@ export class PlayerController implements MovementContext {
     this.landPunch *= Math.max(0, 1 - 10 * dt);
     this.oldJump = this.input.jump;
     this.recordTick();
-
-    // Duck eye-height lerp.
-    const target = this.ducked ? 1 : 0;
-    const rate = dt / DUCK_LERP_TIME;
-    this.duckFrac += Math.sign(target - this.duckFrac) * Math.min(rate, Math.abs(target - this.duckFrac));
 
     copy(this.currPos, this.origin);
     this.currEye = this.eyeHeight;
