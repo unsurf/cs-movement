@@ -1,337 +1,34 @@
 # @unsurf/cs-movement
 
-Counter-Strike / Source-engine movement physics as a standalone library:
-bhop, surf, air-strafing, ladders, ducking, stamina, and plane-based brush
-collision.
+Counter-Strike / Source-engine movement physics as a standalone TypeScript library.
 
-Renderer-agnostic and **zero runtime dependencies** — no Three.js, no engine.
-You bring the geometry and the draw loop; this brings the feel.
-
-<p align="center"><a href="https://hns.unsurf.sh"><strong>Demo</strong></a></p>
-
-## What's in it
-
-- **Movement** — `sv_accelerate` / `sv_airaccelerate` / `sv_friction` faithful
-  to CS:GO's cvars, the air-speed cap, the `sv_enablebunnyhopping 0` takeoff
-  clamp, plus two opt-in extras: a real bhop-assist velocity carry (the
-  `sm_realbhop`-style mechanic actual bhop/chasemod servers run) and a
-  CS2-style stamina pool.
-- **Collision** — Quake/Source-style box trace against convex brushes: planes
-  are Minkowski-expanded by the hull and the move is clipped against them, the
-  same scheme as `CM_ClipBoxToBrush`. Surf falls out of the geometry for free,
-  because "can I stand here" is just the contact plane's normal.
-- **Units** — Source units throughout (1 unit = 1 inch), Y-up. The whole
-  envelope is tuned together: 57u jump apex, 18u step, 32×32×72 hull (54
-  ducked).
-- **Headless** — the simulation core has no DOM dependency and runs under
-  Node, so it's fully unit-testable and usable server-side (anti-cheat replay
-  validation, deterministic lockstep, etc.).
-
-## Install
-
-No public npm registry — install straight from GitHub:
+Bhop, surf, air-strafing, ladders, ducking, stamina, and plane-based brush collision.
+Renderer-agnostic. Zero runtime dependencies. Runs headless in Node.
 
 ```bash
-npm i "@unsurf/cs-movement@github:unsurf/cs-movement#semver:^0.1.0"
+npm i @unsurf/cs-movement
 ```
 
 ## Quick start
 
+### Browser
+
 ```ts
 import { World, PlayerController, brushFromAABB, vec3, DEFAULT_SETTINGS } from '@unsurf/cs-movement';
 
-// 1. Build the world out of convex brushes.
 const world = new World();
-world.solids.push(brushFromAABB(vec3(-512, -16, -512), vec3(512, 0, 512))); // a floor
+world.solids.push(brushFromAABB(vec3(-512, -16, -512), vec3(512, 0, 512)));
 
-// 2. Spawn a player.
 const player = new PlayerController(world, structuredClone(DEFAULT_SETTINGS), vec3(0, 8, 0));
-
-// 3. Browser only: wire up WASD + pointer-lock mouse look.
 player.bindInput(canvas);
 
-// 4. Step the simulation at a fixed tick rate and read state back each frame.
-function fixedUpdate(dt: number) {
-  player.tick(dt); // dt in seconds, e.g. 1/128 for a 128-tick server
-}
-
-// player.origin, player.velocity, player.onGround, player.horizontalSpeed, ...
-```
-
-`tick()` never touches the DOM — it runs identically in a browser, in Node,
-or on a server. Only `bindInput()` and `loadSettings()`/`saveSettings()` need
-`window`/`document`/`localStorage`.
-
-## Core concepts
-
-### `World` and brushes
-
-`World` holds the collision geometry: a flat list of `solids: Brush[]` and,
-optionally, `ladders: LadderVolume[]`. A `Brush` is a convex shape defined by
-its bounding planes — build one with:
-
-```ts
-// Axis-aligned box, given opposite corners.
-brushFromAABB(min: Vec3, max: Vec3): Brush
-
-// Arbitrarily oriented box — center, half-extents, and an orthonormal
-// local x/y/z basis. Use this for ramps and surf: tilt `ay` (the local
-// "up" axis) away from world-up and the resulting brush's top face becomes
-// a walkable-or-surfable slope, decided purely by its normal (see
-// STANDABLE_NORMAL below — no separate "is this a ramp" flag exists).
-brushFromOrientedBox(center: Vec3, halfExtents: Vec3, ax: Vec3, ay: Vec3, az: Vec3): Brush
-```
-
-A `LadderVolume` is a `Brush` plus a horizontal `facing` vector (the
-direction the climbable face points, away from the wall):
-
-```ts
-world.ladders.push({
-  ...brushFromAABB(vec3(60, 0, -24), vec3(100, 600, 24)),
-  facing: vec3(-1, 0, 0),
-});
-```
-
-`World` also exposes the two lower-level queries the movement code is built
-on, useful if you're doing your own raycasts or spawn-point validation:
-
-```ts
-world.trace(start, end, mins, maxs): TraceResult        // sweep a hull, get the first hit
-world.isPositionFree(origin, mins, maxs): boolean        // does the hull fit here right now?
-world.ladderAt(origin, mins, maxs): LadderVolume | null  // which ladder (if any) contains this hull?
-```
-
-### `PlayerController` and the tick loop
-
-`PlayerController` is the whole simulation: one `tick(dt)` call runs duck →
-ladder-check → jump-check → ground-or-air movement → collision → landing, in
-that order, mutating the controller's own fields (no allocation per tick).
-
-```ts
-new PlayerController(world: World, settings: Settings, spawn: Vec3, opts?: PlayerOptions)
-```
-
-`opts` is for host integration, not gameplay:
-
-```ts
-interface PlayerOptions {
-  log?: (msg: string) => void; // anomalies: unstuck pops, blocked-move velocity kills
+function gameLoop(dt: number) {
+  player.tick(dt);
+  // read player.origin, player.velocity, player.onGround, etc.
 }
 ```
 
-Read these each frame to render:
-
-| Field                    | Meaning                                                        |
-| ------------------------ | --------------------------------------------------------------- |
-| `origin`, `velocity`     | World-space position and velocity (Source units/sec)            |
-| `yaw`, `pitch`           | View angles in degrees (mutate directly, or use `bindInput`)    |
-| `onGround`, `groundNormal` | Grounded state and the standing surface's normal               |
-| `ducked`, `duckFrac`     | Duck state and 0→1 eye-height lerp progress                     |
-| `surfing`                | True while riding a steep-but-standable-adjacent slope           |
-| `onLadder`                | The `LadderVolume` currently gripped, or `null`                 |
-| `landingVelocity`         | Horizontal velocity snapshotted the instant of the last landing (see `perf`) |
-| `horizontalSpeed`        | Getter: `length2D(velocity)` — the number CS players actually watch |
-| `eyeHeight`              | Getter: lerped eye height for the current duck state             |
-| `mins`, `maxs`           | Getters: the current (stand or duck) hull extents                |
-| `stamina`, `lastHopQuality` | Only meaningful with `settings.stamina`/`settings.perf` enabled |
-| `landPunch`              | Downward view-punch offset from a hard landing, decays each tick (render-only, needs `settings.viewPunch`) |
-| `prevPos`/`currPos`, `prevEye`/`currEye` | Per-tick snapshots for render interpolation between fixed steps |
-
-Other methods:
-
-```ts
-player.respawn(): void            // reset to the spawn point passed to the constructor
-player.tickHistoryText(): string  // last 384 ticks as one string, for bug reports/replays
-player.bindInput(target: HTMLElement): void // browser only: WASD/Space/Shift/Ctrl/C/R + pointer-lock mouse look
-```
-
-`bindInput` also wires up the standard chasemod `bind "mwheelup" "+jump"` /
-`bind "mwheeldown" "+jump"` — alongside space, not instead of it. A wheel
-notch has no keyup of its own, so it's modeled as a single instantaneous
-`input.jump` pulse (long enough for at least one tick to see it, released
-automatically after) rather than a held key: scrolling fast enough to fire
-two notches in the same tick just re-arms the same pulse, so only the first
-one that tick actually does anything.
-
-`player.input` (`forward`/`back`/`left`/`right`/`jump`/`duck`/`walk`/`reset`)
-is a plain mutable object — drive it yourself for AI, replays, or a custom
-input scheme instead of calling `bindInput`.
-
-## Settings
-
-Every tunable lives on one `Settings` object, passed into the
-`PlayerController` constructor and read fresh every tick — mutate it live and
-the next tick picks it up.
-
-```ts
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '@unsurf/cs-movement';
-
-const settings = structuredClone(DEFAULT_SETTINGS); // or loadSettings() in a browser
-```
-
-| Field | Default | Meaning |
-| --- | --- | --- |
-| `sensitivity` | `1.5` | Mouse sensitivity multiplier |
-| `mYaw` | `0.022` | Degrees per mouse count (CS:GO's `m_yaw`/`m_pitch`) |
-| `fov` | `90` | Horizontal FOV, CS:GO 4:3 terms (render-only; the sim doesn't use it) |
-| `tickRate` | `128` | Advisory — you choose the actual `dt` passed to `tick()` |
-| `autobhop` | `true` | `sv_autobunnyhopping 1` — holding jump keeps hopping |
-| `bhopSpeedClamp` | `true` | `sv_enablebunnyhopping 0` — clamps takeoff speed to 1.1× maxspeed so hops can't compound speed. Set `false` for uncapped CS:GO-style bhop |
-| `noPrestrafe` | `true` | "nopre" — air-strafe/prestrafe gain stays completely free; this puts a hard ceiling on GROUND speed instead, so that gain can't be cashed in as a permanent ground sprint |
-| `airAccelerate` | `100` | `sv_airaccelerate` — this default is KZ/HNS-server tuned; CS:GO's default is `12` |
-| `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Flat max speeds, not percentages |
-| `showSpeed` / `showFps` / `showDebug` | `true` | HUD toggles — informational only, the sim ignores them |
-| `viewPunch` | `false` | Enables `landPunch` on hard landings |
-| `crosshair` | see below | Crosshair render settings — cosmetic only, the sim ignores them |
-| `stamina` | see below | CS2-style stamina pool, **disabled by default** |
-| `perf` | see below | Perfect-bhop velocity carry, **disabled by default** |
-
-`crosshair`, `stamina`, and `perf` are nested objects (`CrosshairSettings`,
-`StaminaSettings`, `PerfSettings` — all exported if you want to type your own
-UI against them).
-
-### Bunnyhopping modes
-
-| `autobhop` | `bhopSpeedClamp` | Behavior |
-| --- | --- | --- |
-| `true` | `true` (default) | Holding jump re-hops every tick you're grounded; takeoff speed capped at 1.1× maxspeed — the KZ/HNS feel |
-| `true` | `false` | Same auto-rehop, but no takeoff clamp — speed compounds without bound, pure CS:GO pre-nerf bhop |
-| `false` | either | Vanilla: a jump only fires if `+jump` was *not* already held last tick (Source's pogo-stick rule) |
-
-### No Prestrafe ("nopre")
-
-`airAccelerate()`'s addspeed cap deliberately compares against
-`dot(velocity, wishdir)` rather than `|velocity|` — that asymmetry is what
-makes air-strafe/prestrafe technique work at all (see `airAccelerate`
-above), and it's *not* affected by this setting: you can always build as
-much air speed as your strafing skill earns you, exactly as if `nopre`
-didn't exist.
-
-What `noPrestrafe: true` (the default) changes is what happens once you're
-back on the ground: `walkMove` puts a hard ceiling on ground speed at the
-player's current max speed (run/walk/crouch), full stop, the moment they're
-grounded and moving under their own power. Land with more than that — from
-prestrafing or an uncapped bhop chain — and it gets clamped down instead of
-persisting as a permanent ground sprint. You can still fly through the air
-fast for style or technique; you just can't keep that speed once your feet
-are back on the floor. Surfing is unaffected either way, since it never
-runs through `walkMove` — riding a ramp is expected to exceed run speed;
-that's the whole point of surf.
-
-Landing and jumping again doesn't "retain" or carry speed forward by
-itself — `bhopSpeedClamp` (above) is the only speed limit a takeoff gets by
-default, judged fresh every time. `perf` (below) is the one, narrow
-exception.
-
-### Perf — perfect-bhop velocity carry
-
-```ts
-interface PerfSettings {
-  enabled: boolean;     // default false
-  maxAirSpeed: number;  // default 390 — asymptotic ceiling air speed approaches, observed on nopre chasemod servers
-}
-```
-
-A "perfect bhop" is a real, skill-timed **instant** rejump — manual input,
-the tick right after landing, nothing else. When one happens, your takeoff
-velocity is restored to exactly what you landed with (`player.landingVelocity`),
-bypassing whatever `bhopSpeedClamp` or ground friction had already reduced
-it to. `player.lastHopQuality` (`'perfect' | 'normal' | null`) reports which
-one just happened — flash a HUD element off it, drive an audio cue,
-whatever you like.
-
-Nothing else qualifies, ever:
-
-- **A rejump even one tick late** gets nothing — no partial credit for a
-  near-miss. The takeoff is left at whatever `bhopSpeedClamp` computed.
-- **`autobhop` never gets the carry.** Held-jump autobhop always re-fires
-  the instant it's able to, regardless of skill — treating that as a
-  guaranteed "perfect" every hop would permanently defeat `bhopSpeedClamp`,
-  since the carry would restore whatever you landed with every single time
-  and the clamp would never get a tick to actually hold speed down.
-- **A landing that came off a surf ramp never counts**, even on an
-  otherwise-instant rejump. Surfing (`player.surfing`) lets you build as
-  much speed as you want, completely uncapped, and that stays true for the
-  rest of the flight even after you leave the ramp — but it's never
-  something you "cash in" as a perfect bhop. The very next jump after such
-  a landing is judged as an ordinary takeoff instead.
-- **The very first jump of a life** (or since `respawn()`) never carries —
-  gravity settling you onto the ground you spawned on looks identical to a
-  timed landing, so without this check your first jump could carry a
-  "landing velocity" that was never really earned.
-
-Chaining perfect carries with real air-strafe technique otherwise climbs
-indefinitely, so whenever `enabled`, air speed itself is squeezed every
-airborne tick (`AirMove.ts`, not just at the carry) through a
-diminishing-returns curve that approaches `maxAirSpeed` instead of a hard
-clamp: speeds at or below it are untouched, and gains shrink the further
-past it a chain pushes. Surfing — and anything carried from it, until your
-next real landing — is exempt from this squeeze entirely.
-
-### Stamina
-
-```ts
-interface StaminaSettings {
-  enabled: boolean;      // default false
-  max: number;           // default 1 — the pool's ceiling
-  jumpCost: number;      // default 0.08 — fraction of max added per jump
-  landCost: number;      // default 0.05 — fraction of max added per landing
-  recoveryRate: number;  // default 0.5 — fraction of max recovered per second
-  maxPenalty: number;    // default 0.4 — speed/jump-velocity cut at a full pool
-}
-```
-
-A CS2-style fatigue pool: jumping and landing fill it, it drains back to 0
-over time, and while it's full-ish both ground speed and jump velocity are
-throttled by up to `maxPenalty`. Off by default — every bhop-focused preset
-plays with this disabled, matching servers that zero the cvars out. Read
-`player.stamina` (`0..settings.stamina.max`) directly for a HUD meter.
-
-### Ducking
-
-Hold `input.duck`; `player.ducked` flips once there's room, and
-`player.duckFrac` (0→1) lerps over `DUCK_LERP_TIME` (0.2s) for smooth eye
-height and hull-size transitions. Ducking mid-air pulls the feet up so the
-head stays put — you can duck onto ledges, same as CS. The hull shrinks from
-32×32×72 standing to 32×32×54 ducked.
-
-### Ladders
-
-Walk into a ladder volume facing it (or touch one mid-air) to grip it.
-Climbing uses the full 3D view basis — looking up while holding forward
-climbs, looking down descends — and, matching CS:GO, the forward/strafe
-inputs are **not normalized**, so aiming diagonally into the ladder and
-holding W+strafe stacks both contributions for CS:GO's authentic ~1.41×
-"fastclimb". Press jump to push off in the direction the ladder faces.
-
-### Surf
-
-There's no separate surf mode or flag to enable — it falls directly out of
-collision. Any brush face whose normal is too steep to stand on
-(`normal.y < STANDABLE_NORMAL`, ~45.57°) but not vertical gets clipped with
-`OVERBOUNCE_SURF` (no speed loss) instead of the ordinary
-`OVERBOUNCE_DEFAULT`, and `player.surfing` goes `true` while a contact plane
-qualifies. Build a ramp with `brushFromOrientedBox` and tilt it into that
-range.
-
-## Diagnostics
-
-```ts
-new PlayerController(world, settings, spawn, {
-  log: (msg) => console.warn('[movement]', msg),
-});
-```
-
-The `log` hook fires on genuine anomalies only — a `checkStuck` unstuck pop,
-a blocked-move velocity kill, a degenerate collision crease — never on
-routine ticks. `player.tickHistoryText()` returns the last 384 ticks
-(position, velocity, flags, inputs, contact planes) as one newline-joined
-string, handy for pasting into a bug report or replaying a repro.
-
-## Headless usage & testing
-
-Nothing in `tick()` touches the DOM, so you can simulate entirely in Node —
-this is exactly how the library's own test suite works:
+### Headless (Node / server)
 
 ```ts
 import { World, PlayerController, brushFromAABB, vec3, DEFAULT_SETTINGS } from '@unsurf/cs-movement';
@@ -341,67 +38,147 @@ world.solids.push(brushFromAABB(vec3(-8192, -64, -8192), vec3(8192, 0, 8192)));
 
 const player = new PlayerController(world, structuredClone(DEFAULT_SETTINGS), vec3(0, 5, 0));
 player.input.forward = true;
-for (let i = 0; i < 512; i++) player.tick(1 / 128); // 4 seconds at 128 ticks/sec
+for (let i = 0; i < 512; i++) player.tick(1 / 128);
 
-console.log(player.horizontalSpeed); // ~250 — capped at runSpeed
+console.log(player.horizontalSpeed); // ~250
 ```
+
+## How it works
+
+The simulation is a single `tick(dt)` call that runs the full Source engine pipeline: duck, ladder check, jump, ground/air movement, collision, landing. It mutates the player's own fields — no allocation per tick.
+
+**What you bring:** geometry (brushes), a render loop, and input.
+**What this provides:** the physics. Read `player.origin` and `player.velocity` each frame to draw.
+
+### Building a world
+
+```ts
+import { World, brushFromAABB, brushFromOrientedBox } from '@unsurf/cs-movement';
+
+const world = new World();
+
+// Flat floor
+world.solids.push(brushFromAABB(vec3(-512, -16, -512), vec3(512, 0, 512)));
+
+// Surf ramp — tilt the "up" axis away from vertical
+const ramp = brushFromOrientedBox(
+  vec3(0, 100, 0),        // center
+  vec3(200, 8, 200),      // half-extents
+  vec3(1, 0, 0),          // local X
+  vec3(0, 0.7, 0.7),      // local Y (tilted = surfable)
+  vec3(0, -0.7, 0.7),     // local Z
+);
+world.solids.push(ramp);
+
+// Ladder
+world.ladders.push({
+  ...brushFromAABB(vec3(60, 0, -24), vec3(100, 600, 24)),
+  facing: vec3(-1, 0, 0),
+});
+```
+
+### Player fields
+
+| Field | What it is |
+| --- | --- |
+| `origin`, `velocity` | Position and velocity (Source units/sec) |
+| `yaw`, `pitch` | View angles in degrees |
+| `onGround`, `groundNormal` | Grounded state + surface normal |
+| `ducked`, `duckFrac` | Duck state and 0→1 eye-height lerp |
+| `surfing` | True on steep-but-surfable slopes |
+| `onLadder` | Current `LadderVolume` or `null` |
+| `horizontalSpeed` | `length2D(velocity)` — the HUD number |
+| `eyeHeight` | Lerped eye height for current duck state |
+| `stamina` | Fatigue pool (only when `settings.stamina.enabled`) |
+| `lastHopQuality` | `'perfect'` / `'normal'` / `null` (only when `settings.perf.enabled`) |
+
+### Input
+
+`bindInput(element)` wires WASD/Space/Shift/Ctrl/C/R + pointer-lock mouse + mousewheel bhop. Or drive `player.input` directly:
+
+```ts
+player.input.forward = true;
+player.input.jump = true;
+player.tick(1 / 128);
+```
+
+## Settings
+
+Every tunable lives on one `Settings` object, mutated live and read each tick.
+
+```ts
+import { DEFAULT_SETTINGS } from '@unsurf/cs-movement';
+
+const settings = structuredClone(DEFAULT_SETTINGS);
+settings.autobhop = true;
+settings.bhopSpeedClamp = false; // uncapped CS:GO-style bhop
+settings.airAccelerate = 100;   // KZ server default (CS:GO is 12)
+```
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `autobhop` | `true` | Holding jump re-hops every grounded tick |
+| `bhopSpeedClamp` | `true` | Clamps takeoff to 1.1x maxspeed |
+| `noPrestrafe` | `true` | Ground speed ceiling prevents prestrafe carry |
+| `airAccelerate` | `100` | `sv_airaccelerate` — CS:GO default is `12` |
+| `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Max speeds in units/sec |
+| `sensitivity` | `1.5` | Mouse sensitivity |
+| `mYaw` | `0.022` | Degrees per mouse count |
+| `viewPunch` | `false` | Landing view-punch offset |
+| `stamina` | disabled | CS2-style fatigue pool |
+| `perf` | disabled | Perfect-bhop velocity carry |
+
+### Bunnyhopping modes
+
+| `autobhop` | `bhopSpeedClamp` | Behavior |
+| --- | --- | --- |
+| `true` | `true` | KZ/HNS — auto-rehop, speed capped |
+| `true` | `false` | Uncapped — speed compounds without bound |
+| `false` | either | Vanilla — jump only fires on fresh press |
 
 ## API reference
 
-Everything below is exported from the package root (`@unsurf/cs-movement`).
+Everything is exported from `@unsurf/cs-movement`.
 
-**Math** — `Vec3`, `vec3`, `copy`, `set`, `add`, `sub`, `addScaled`, `scale`,
-`dot`, `cross`, `length`, `length2D`, `lengthSq`, `normalize`, `clone`
+### Player
 
-**Constants** — `GRAVITY`, `RUN_SPEED`, `WALK_SPEED`, `CROUCH_SPEED`,
-`STANDABLE_NORMAL`, `DEFAULT_TICK_RATE`, `MAX_FRAME_TIME`, plus each
-feature's own tunables: `FRICTION`/`STOP_SPEED`, `ACCELERATE`,
-`AIR_ACCELERATE`/`AIR_SPEED_CAP`, `OVERBOUNCE_SURF`/`OVERBOUNCE_DEFAULT`,
-`DIST_EPSILON`, `JUMP_HEIGHT`/`JUMP_VELOCITY`/`BHOP_MAX_SPEED_FACTOR`,
-`HULL_HALF_WIDTH`/`HULL_STAND_HEIGHT`/`HULL_DUCK_HEIGHT`/`EYE_STAND`/`EYE_DUCK`/`DUCK_LERP_TIME`,
-`LADDER_SPEED`/`LADDER_JUMP_OFF_SPEED`, `STEP_HEIGHT`, `MAX_CLIP_PLANES`,
-`NON_JUMP_VELOCITY`/`GROUND_TRACE_DIST`, `M_YAW`/`PITCH_CLAMP`
+- `PlayerController` — the main class. Constructor: `(world, settings, spawn, opts?)`
+- `PlayerOptions` — `{ log?: (msg: string) => void }`
+- Methods: `tick(dt)`, `respawn()`, `bindInput(el)`, `tickHistoryText()`
+- Properties: `origin`, `velocity`, `yaw`, `pitch`, `onGround`, `ducked`, `surfing`, `onLadder`, `input`, `stamina`, `lastHopQuality`, `horizontalSpeed`, `eyeHeight`, `mins`, `maxs`, `prevPos`/`currPos`, `prevEye`/`currEye`, `landingVelocity`, `landPunch`
 
-**Physics (pure functions)** — `applyFriction`, `accelerate`, `airAccelerate`,
-`clipVelocity`, `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`,
-`applyAirSpeedCeiling`
+### World & Collision
 
-**Collision** — `Plane`, `Brush`, `LadderVolume`, `TraceResult`,
-`brushFromAABB`, `brushFromOrientedBox`, `traceBox`, `boxInBrush`, `World`
+- `World` — `{ solids: Brush[], ladders: LadderVolume[] }`
+- `brushFromAABB(min, max)` — axis-aligned box
+- `brushFromOrientedBox(center, halfExtents, ax, ay, az)` — oriented box
+- `traceBox(start, end, mins, maxs)` — hull sweep
+- `boxInBrush(origin, mins, maxs, brush)` — containment test
+- Types: `Brush`, `LadderVolume`, `Plane`, `TraceResult`
 
-**Settings** — `Settings`, `CrosshairSettings`, `StaminaSettings`,
-`PerfSettings`, `DEFAULT_SETTINGS`, `loadSettings`, `saveSettings`
+### Settings
 
-**Player** — `PlayerController`, `PlayerOptions`
+- `Settings`, `CrosshairSettings`, `StaminaSettings`, `PerfSettings` — types
+- `DEFAULT_SETTINGS` — default values
+- `loadSettings()` / `saveSettings()` — localStorage persistence (browser only)
 
-> `loadSettings`/`saveSettings` persist to a fixed `localStorage` key —
-> browser-only, and shared across every consumer on the same origin. Roll
-> your own persistence if you need per-app storage.
+### Math
 
-### Package layout
+- `Vec3` type, `vec3(x, y, z)` constructor
+- `copy`, `set`, `add`, `sub`, `addScaled`, `scale`, `dot`, `cross`, `length`, `length2D`, `lengthSq`, `normalize`, `clone`
 
-The source mirrors this reference one behavior per folder — e.g. the bhop
-takeoff logic lives in `player/Jump/Jump.ts` next to its own
-`Jump.config.ts` (tunables) and `Jump.test.ts`. `PlayerController` is a thin
-orchestrator that implements a shared `MovementContext` and calls into each
-behavior in sequence; if you're digging into *why* something moves the way
-it does, that's the file to start from.
+### Physics (pure functions)
 
-## Attribution — please read
+- `applyFriction`, `accelerate`, `airAccelerate`, `clipVelocity`
+- `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`
+- `applyAirSpeedCeiling`
 
-Licensed under **Apache-2.0**. You can use it commercially and in closed-source
-products, but the license is not decoration:
+### Constants
 
-1. Ship the `LICENSE` and `NOTICE` files with your distribution — including
-   bundled and minified builds.
-2. Keep the `@license` header comments intact. Terser and esbuild preserve them
-   by default; don't configure that away.
-3. Mark any files you modify as changed.
-4. Don't use "unsurf" or the author's name to endorse or promote your product.
-
-Credit is the price. It's a low one — honour it.
+`GRAVITY`, `RUN_SPEED`, `WALK_SPEED`, `CROUCH_SPEED`, `STANDABLE_NORMAL`, `JUMP_HEIGHT`, `JUMP_VELOCITY`, `HULL_HALF_WIDTH`, `HULL_STAND_HEIGHT`, `HULL_DUCK_HEIGHT`, `EYE_STAND`, `EYE_DUCK`, `LADDER_SPEED`, `STEP_HEIGHT`, `M_YAW`, `PITCH_CLAMP`, plus per-module tunables.
 
 ## License
 
-Copyright 2026 unsurf. Licensed under the Apache License, Version 2.0.
-See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+Apache-2.0. Copyright 2026 unsurf. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+
+Ship `LICENSE` and `NOTICE` with your distribution. Keep `@license` headers intact. Mark modified files.
