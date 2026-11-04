@@ -4,8 +4,8 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
+import { length, scale } from '../../math/vec3.js';
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
-import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
@@ -17,17 +17,18 @@ export function checkJump(ctx: MovementContext): void {
   if (!ctx.settings.autobhop && ctx.oldJump) return;
 
   // sv_enablebunnyhopping 0: clamp takeoff speed to 1.1 × maxspeed
-  // (Source's PreventBunnyJumping), so hops don't compound speed. A
-  // perfect-bhop carry (below) can restore more than this, but everything
-  // else — a late rejump, autobhop, or a surf-derived landing — is left
-  // exactly here.
+  // (CCSGameMovement::PreventBunnyJumping), so hops don't compound speed.
+  // The reference is the player's BASE max speed (player->m_flMaxspeed, i.e.
+  // the weapon speed) — not the duck/walk-cropped mv->m_flMaxSpeed — so
+  // crouch-jumping or walk-jumping still clamps at 1.1 × run speed. The
+  // whole 3D velocity is scaled, exactly like the C++. A perfect-bhop carry
+  // (below) can restore more than this, but everything else — a late
+  // rejump, autobhop, or a surf-derived landing — is left exactly here.
   if (ctx.settings.bhopSpeedClamp) {
-    const maxScaled = currentMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;
-    const speed = ctx.horizontalSpeed;
+    const maxScaled = ctx.settings.runSpeed * BHOP_MAX_SPEED_FACTOR;
+    const speed = length(ctx.velocity);
     if (speed > maxScaled) {
-      const fraction = maxScaled / speed;
-      ctx.velocity.x *= fraction;
-      ctx.velocity.z *= fraction;
+      scale(ctx.velocity, ctx.velocity, maxScaled / speed);
     }
   }
 
