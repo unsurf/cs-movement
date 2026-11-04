@@ -118,7 +118,7 @@ settings.airAccelerate = 100;   // KZ server default (CS:GO is 12)
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `autobhop` | `true` | Holding jump re-hops every grounded tick |
-| `bhopSpeedClamp` | `true` | Clamps takeoff to 1.1x maxspeed |
+| `bhopSpeedClamp` | `true` | Clamps takeoff to 1.1x `runSpeed` (not the duck/walk-cropped speed) |
 | `noPrestrafe` | `true` | Ground speed ceiling prevents prestrafe carry |
 | `airAccelerate` | `100` | `sv_airaccelerate` — CS:GO default is `12` |
 | `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Max speeds in units/sec |

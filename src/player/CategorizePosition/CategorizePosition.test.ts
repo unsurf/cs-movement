@@ -92,3 +92,27 @@ describe('categorizePosition ground following', () => {
   });
 });
 
+describe('start-of-tick liftoff (PlayerMove, vel.z > 250)', () => {
+  function settledPlayer(vy: number): PlayerController {
+    const p = standingPlayer();
+    for (let i = 0; i < 4; i++) p.tick(1 / 128);
+    expect(p.onGround).toBe(true);
+    p.velocity.y = vy;
+    return p;
+  }
+
+  it('a grounded player shot upward at 300 u/s leaves the ground', () => {
+    const p = settledPlayer(300);
+    p.tick(1 / 128);
+    expect(p.onGround).toBe(false);
+    expect(p.velocity.y).toBeCloseTo(300 - 800 / 128, 3);
+  });
+
+  it('at 200 u/s the grounded branch still eats it', () => {
+    const p = settledPlayer(200);
+    p.tick(1 / 128);
+    expect(p.onGround).toBe(true);
+    expect(p.velocity.y).toBe(0);
+  });
+});
+

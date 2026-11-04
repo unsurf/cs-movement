@@ -30,6 +30,7 @@ import { finishGravity, startGravity } from './Gravity/Gravity.js';
 import { walkMove } from './WalkMove/WalkMove.js';
 import { airMove } from './AirMove/AirMove.js';
 import { categorizePosition } from './CategorizePosition/CategorizePosition.js';
+import { START_OF_TICK_LIFTOFF_VELOCITY } from './CategorizePosition/CategorizePosition.config.js';
 import { checkStuck } from './StuckCheck/StuckCheck.js';
 import { detectBlockedMove } from './BlockedMove/BlockedMove.js';
 import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
@@ -295,6 +296,11 @@ export class PlayerController implements MovementContext {
       this.input.reset = false;
       this.respawn();
     }
+
+    // PlayerMove: shot upward fast enough (jump pad, boost) and you are not on
+    // the ground, whatever the last categorize said. Must precede the duck
+    // update and the fall-speed sample so they see an airborne player.
+    if (this.onGround && this.velocity.y > START_OF_TICK_LIFTOFF_VELOCITY) this.onGround = false;
 
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
     this.time += dt;
