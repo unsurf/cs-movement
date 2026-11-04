@@ -4,5 +4,5 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-export const NON_JUMP_VELOCITY = 180; // don't re-ground while moving up faster than this
+export const NON_JUMP_VELOCITY = 140; // CategorizePosition: moving up faster than this is never "on ground" (gamemovement.cpp NON_JUMP_VELOCITY)
 export const GROUND_TRACE_DIST = 2; // CategorizePosition trace-down distance
