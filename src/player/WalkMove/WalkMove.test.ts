@@ -41,9 +41,15 @@ function groundTurnPeak(settings: Settings, turnRate: number): number {
 }
 
 describe('noPrestrafe on the ground', () => {
-  it('off: continuous ground-turn strafing can exceed run speed', () => {
-    const peak = groundTurnPeak(makeSettings({ noPrestrafe: false }), 2);
-    expect(peak).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.2);
+  it('off: no ground cap is applied, so landing speed is only bled by friction', () => {
+    // The old version of this test relied on a ground-turn exploit that only
+    // exists at KZ-style sv_accelerate/sv_friction. At the real CS:GO values
+    // (5.5 / 5.2) turning gains little, so check the missing cap directly.
+    const player = new PlayerController(makeWorld(), makeSettings({ noPrestrafe: false }), vec3(0, 5, 0));
+    while (!player.onGround) player.tick(DT);
+    player.velocity.x = 400;
+    player.tick(DT);
+    expect(player.horizontalSpeed).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5);
   });
 
   it('on: the same ground-turn strafing never exceeds run speed', () => {
