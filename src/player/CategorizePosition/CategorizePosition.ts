@@ -105,8 +105,10 @@ export function categorizePosition(ctx: MovementContext): void {
     // walkMove's friction gets a chance to bleed it, so a perfect rejump
     // has something real to carry back to (see PerfBonus).
     set(ctx.landingVelocity, ctx.velocity.x, ctx.velocity.y, ctx.velocity.z);
-    if (ctx.settings.stamina.enabled) {
-      ctx.stamina = addStamina(ctx.stamina, ctx.settings.stamina.landCost, ctx.settings.stamina.max);
+    // OnLand: landing cost scales with how fast the player was falling.
+    if (ctx.settings.stamina.enabled && ctx.fallVelocity > 0) {
+      const { landCost, max } = ctx.settings.stamina;
+      ctx.stamina = addStamina(ctx.stamina, landCost * ctx.fallVelocity, max);
     }
     if (ctx.settings.viewPunch && ctx.fallVelocity > 250) {
       ctx.landPunch = Math.min((ctx.fallVelocity - 250) * 0.012, 10);

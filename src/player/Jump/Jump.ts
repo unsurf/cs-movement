@@ -6,7 +6,7 @@
  */
 import { length, scale } from '../../math/vec3.js';
 import { finishGravity } from '../Gravity/Gravity.js';
-import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
+import { addStamina, staminaJumpMultiplier } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
@@ -54,19 +54,23 @@ export function checkJump(ctx: MovementContext, dt: number): void {
     }
   }
 
-  let jumpVelocity = JUMP_VELOCITY;
-  if (ctx.settings.stamina.enabled) {
-    jumpVelocity *= staminaPenaltyMultiplier(ctx.stamina, ctx.settings.stamina.max, ctx.settings.stamina.maxPenalty);
-    ctx.stamina = addStamina(ctx.stamina, ctx.settings.stamina.jumpCost, ctx.settings.stamina.max);
-  }
+  const startY = ctx.velocity.y;
   // CCSGameMovement::CheckJumpButton: a ducking jump SETS vertical velocity;
   // a standing one ADDS to it, so it keeps the half-tick of gravity that
   // StartGravity already took off. Then the second half is applied right
   // here (FinishGravity), before the move — a standing jump therefore moves
   // with jump - g*dt on its first tick, not jump - g*dt/2.
-  if (ctx.ducking || ctx.duckFlag || ctx.ducked) ctx.velocity.y = jumpVelocity;
-  else ctx.velocity.y += jumpVelocity;
+  if (ctx.ducking || ctx.duckFlag || ctx.ducked) ctx.velocity.y = JUMP_VELOCITY;
+  else ctx.velocity.y += JUMP_VELOCITY;
+  // Fatigue scales the whole vertical velocity, using the stamina the player
+  // arrived with (this jump's own cost is added afterwards).
+  if (ctx.settings.stamina.enabled) ctx.velocity.y *= staminaJumpMultiplier(ctx.stamina);
   finishGravity(ctx, dt);
+  // OnJump: the cost is proportional to the vertical velocity the jump added.
+  if (ctx.settings.stamina.enabled) {
+    const { jumpCost, max } = ctx.settings.stamina;
+    ctx.stamina = addStamina(ctx.stamina, jumpCost * (ctx.velocity.y - startY), max);
+  }
   ctx.onGround = false;
   ctx.hasJumpedBefore = true;
   // Starting a brand-new flight either way — any surf touch from before

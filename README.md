@@ -89,7 +89,7 @@ world.ladders.push({
 | `onLadder` | Current `LadderVolume` or `null` |
 | `horizontalSpeed` | `length2D(velocity)` — the HUD number |
 | `eyeHeight` | Eye height for the current duck amount (eased like CS's `SetDuckedEyeOffset`) |
-| `stamina` | Fatigue pool (only when `settings.stamina.enabled`) |
+| `stamina` | Fatigue pool in CS units, 0–`settings.stamina.max` (only when `settings.stamina.enabled`) |
 | `lastHopQuality` | `'perfect'` / `'normal'` / `null` (only when `settings.perf.enabled`) |
 
 ### Input
@@ -125,7 +125,7 @@ settings.airAccelerate = 100;   // KZ server default (CS:GO is 12)
 | `sensitivity` | `1.5` | Mouse sensitivity |
 | `mYaw` | `0.022` | Degrees per mouse count |
 | `viewPunch` | `false` | Landing view-punch offset |
-| `stamina` | disabled | CS2-style fatigue pool |
+| `stamina` | disabled | CS:GO's stamina (`sv_stamina*`: max 80, jump 0.08/land 0.05 per u/s, recovery 60/s) |
 | `perf` | disabled | Perfect-bhop velocity carry |
 
 ### Bunnyhopping modes
@@ -170,7 +170,7 @@ Everything is exported from `@unsurf/cs-movement`.
 ### Physics (pure functions)
 
 - `applyFriction`, `accelerate`, `airAccelerate`, `clipVelocity`
-- `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`
+- `addStamina`, `recoverStamina`, `staminaJumpMultiplier`, `staminaSpeedMultiplier`
 - `applyAirSpeedCeiling`
 
 ### Constants

@@ -8,7 +8,7 @@
 
 import type { AccelerateModifiers } from '../../physics/Accelerate/Accelerate.types.js';
 import { length } from '../../math/vec3.js';
-import { staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
+import { staminaSpeedMultiplier } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
 import { WALK_CAP_LEEWAY } from './CurrentMaxSpeed.config.js';
 
@@ -41,7 +41,7 @@ export function currentMaxSpeed(ctx: MovementContext): number {
   speed *= duckSpeedModifier(ctx);
 
   if (ctx.settings.stamina.enabled) {
-    speed *= staminaPenaltyMultiplier(ctx.stamina, ctx.settings.stamina.max, ctx.settings.stamina.maxPenalty);
+    speed *= staminaSpeedMultiplier(ctx.stamina);
   }
   return speed;
 }

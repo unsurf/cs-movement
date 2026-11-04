@@ -70,7 +70,7 @@ export interface MovementContext {
   currEye: number;
   landPunch: number; // downward view offset from landing, decays each tick
 
-  /** 0..settings.stamina.max; only meaningful while settings.stamina.enabled. */
+  /** 0..settings.stamina.max (CS units); only meaningful while settings.stamina.enabled. */
   stamina: number;
   /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
   lastHopQuality: 'perfect' | 'normal' | null;

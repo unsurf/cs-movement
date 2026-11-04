@@ -300,7 +300,7 @@ export class PlayerController implements MovementContext {
     this.time += dt;
     updateDuck(this, dt);
     if (this.settings.stamina.enabled) {
-      this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, this.settings.stamina.max, dt);
+      this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, dt);
     }
 
     if (!checkStuck(this)) {

@@ -6,11 +6,13 @@
  */
 import type { StaminaSettings } from './Stamina.types.js';
 
+/** STAMINA_RANGE: the scale stamina is divided by when it throttles jumps and speed. */
+export const STAMINA_RANGE = 100;
+
 export const DEFAULT_STAMINA_SETTINGS: StaminaSettings = {
   enabled: false,
-  max: 1,
+  max: 80,
   jumpCost: 0.08,
   landCost: 0.05,
-  recoveryRate: 0.5,
-  maxPenalty: 0.4,
+  recoveryRate: 60,
 };
