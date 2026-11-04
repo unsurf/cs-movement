@@ -24,8 +24,11 @@ export function walkMove(ctx: MovementContext, dt: number): void {
   accelerate(ctx.velocity, ctx.wishDir, wishspeed, ACCELERATE, dt, accelerateModifiers(ctx));
   ctx.velocity.y = 0;
 
-  // "nopre": air-strafe/prestrafe gain (AirMove.ts) is left completely free —
-  // this is where it gets spent instead. Ground speed is a hard ceiling at
+  // "nopre" is what stock CS:GO does: WalkMove always clamps ground speed to
+  // the current max speed, with no exception for speed carried in from the air
+  // ("Additional max speed clamp to keep us from going faster than allowed
+  // while turning"). Air-strafe/prestrafe gain (AirMove.ts) is left completely
+  // free — this is where it gets spent instead. Ground speed is a hard ceiling at
   // the player's current max speed, full stop, the moment they're grounded
   // and moving under their own power: no "keep whatever you landed with"
   // exception. That's the point of nopre — you can still build wild speed in
