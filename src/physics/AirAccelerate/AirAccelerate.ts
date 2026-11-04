@@ -4,7 +4,7 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-// Provenance (Valve source-sdk-2013, game/shared/gamemovement.cpp): CGameMovement::AirAccelerate
+// Provenance (cstrike15_src@f82112a, game/shared/gamemovement.cpp): CGameMovement::AirAccelerate
 
 import type { Vec3 } from '../../math/vec3.js';
 import { AIR_SPEED_CAP } from './AirAccelerate.config.js';
@@ -23,6 +23,7 @@ export function airAccelerate(
   airaccel: number,
   dt: number,
   airCap: number = AIR_SPEED_CAP,
+  surfaceFriction = 1,
 ): void {
   const wishspd = wishspeed > airCap ? airCap : wishspeed;
 
@@ -30,7 +31,7 @@ export function airAccelerate(
   const addspeed = wishspd - currentspeed;
   if (addspeed <= 0) return;
 
-  let accelspeed = airaccel * wishspeed * dt;
+  let accelspeed = airaccel * wishspeed * dt * surfaceFriction;
   if (accelspeed > addspeed) accelspeed = addspeed;
 
   vel.x += accelspeed * wishdir.x;

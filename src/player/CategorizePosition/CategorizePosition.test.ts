@@ -26,3 +26,29 @@ describe('categorizePosition upward-velocity cutoff', () => {
     expect(fast.onGround).toBe(false);
   });
 });
+
+describe('categorizePosition surface friction', () => {
+  function airbornePlayer(vy: number): PlayerController {
+    const player = new PlayerController(new World(), structuredClone(DEFAULT_SETTINGS), vec3(0, 100, 0));
+    player.velocity.y = vy;
+    return player;
+  }
+
+  it('drops to 0.25 when rising slowly with no ground below', () => {
+    const player = airbornePlayer(50);
+    categorizePosition(player);
+    expect(player.onGround).toBe(false);
+    expect(player.surfaceFriction).toBe(0.25);
+  });
+
+  it('stays 1 when falling, or rising fast enough to be a jump', () => {
+    const falling = airbornePlayer(-50);
+    categorizePosition(falling);
+    expect(falling.surfaceFriction).toBe(1);
+
+    const jumping = airbornePlayer(NON_JUMP_VELOCITY + 50);
+    jumping.surfaceFriction = 0.25;
+    categorizePosition(jumping);
+    expect(jumping.surfaceFriction).toBe(1);
+  });
+});

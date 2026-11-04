@@ -19,7 +19,15 @@ import { computeWish } from '../WishDir/WishDir.js';
 // bhop-assist chasemod servers cap air speed itself, not just the takeoff.
 export function airMove(ctx: MovementContext, dt: number): void {
   const wishspeed = computeWish(ctx);
-  airAccelerate(ctx.velocity, ctx.wishDir, wishspeed, ctx.settings.airAccelerate, dt);
+  airAccelerate(
+    ctx.velocity,
+    ctx.wishDir,
+    wishspeed,
+    ctx.settings.airAccelerate,
+    dt,
+    undefined,
+    ctx.surfaceFriction,
+  );
 
   // Gravity is NOT applied here: Source brackets the whole tick with
   // StartGravity/FinishGravity (see Gravity.ts and PlayerController.tick).

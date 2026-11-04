@@ -8,16 +8,22 @@ import { STANDABLE_NORMAL } from '../../constants.js';
 import { copy, set } from '../../math/vec3.js';
 import { addStamina } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
-import { GROUND_TRACE_DIST, NON_JUMP_VELOCITY } from './CategorizePosition.config.js';
+import { GROUND_TRACE_DIST, NON_JUMP_VELOCITY, RISING_SURFACE_FRICTION } from './CategorizePosition.config.js';
 
 function setNotGrounded(ctx: MovementContext): void {
   ctx.onGround = false;
+  // CategorizePosition: no valid ground while still moving up (e.g. rising
+  // along a surf ramp, or the last stretch of a jump) cuts surface friction
+  // to 0.25, which AirAccelerate multiplies into next tick's air acceleration.
+  if (ctx.velocity.y > 0) ctx.surfaceFriction = RISING_SURFACE_FRICTION;
 }
 
 export function categorizePosition(ctx: MovementContext): void {
+  ctx.surfaceFriction = 1;
+
   // Moving up faster than this and we can't be "on" anything.
   if (ctx.velocity.y > NON_JUMP_VELOCITY) {
-    setNotGrounded(ctx);
+    ctx.onGround = false;
     return;
   }
 

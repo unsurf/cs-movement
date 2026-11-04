@@ -43,6 +43,8 @@ export interface MovementContext {
   pitch: number;
 
   onGround: boolean;
+  /** player->m_surfaceFriction: scales air acceleration; 0.25 while rising without ground (see CategorizePosition). */
+  surfaceFriction: number;
   groundNormal: Vec3;
   ducked: boolean;
   duckFrac: number; // 0 standing, 1 ducked (drives eye lerp)

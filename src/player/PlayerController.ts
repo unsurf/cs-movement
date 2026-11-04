@@ -53,6 +53,7 @@ export class PlayerController implements MovementContext {
   pitch = 0;
 
   onGround = false;
+  surfaceFriction = 1;
   groundNormal = vec3(0, 1, 0);
   ducked = false;
   duckFrac = 0; // 0 standing, 1 ducked (drives eye lerp)
@@ -245,6 +246,7 @@ export class PlayerController implements MovementContext {
     copy(this.prevPos, this.spawn);
     copy(this.currPos, this.spawn);
     this.onGround = false;
+    this.surfaceFriction = 1;
     this.onLadder = null;
     this.ducked = false;
     this.stamina = 0;
