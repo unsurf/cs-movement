@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { vec3 } from '../../math/vec3';
 import { World } from '../../physics/World/World';
-import { brushFromOrientedBox } from '../../physics/Collision/Collision';
+import { brushFromAABB, brushFromOrientedBox } from '../../physics/Collision/Collision';
 import { PlayerController } from '../PlayerController';
 import { DEFAULT_SETTINGS } from '../../settings/Settings';
 import type { Settings } from '../../settings/Settings';
@@ -165,3 +165,30 @@ describe('surfing', () => {
     }
   });
 });
+
+describe('wall contact (overbounce 1, allFraction)', () => {
+  function wallWorld(): World {
+    const world = new World();
+    // Vertical wall: solid for x >= 100.
+    world.solids.push(brushFromAABB(vec3(100, -512, -4096), vec3(200, 4096, 4096)));
+    return world;
+  }
+
+  it('slides along an airborne first impact at full along-wall speed (no 1.001 bleed)', () => {
+    const player = new PlayerController(wallWorld(), makeSettings(), vec3(82, 500, 0));
+    player.velocity.x = 600;
+    player.velocity.z = 200;
+    player.tick(DT);
+    expect(player.velocity.z).toBeCloseTo(200, 6);
+    expect(player.velocity.x).toBeLessThanOrEqual(0.05);
+  });
+
+  it('zeroes velocity when the player cannot move at all this tick', () => {
+    const world = wallWorld();
+    const player = new PlayerController(world, makeSettings(), vec3(83.96875, 500, 0)); // flush against the wall
+    player.velocity.x = 600;
+    player.tick(DT);
+    expect(player.horizontalSpeed).toBeLessThan(1);
+  });
+});
+

@@ -4,5 +4,6 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-export const OVERBOUNCE_SURF = 1.0; // preserves speed on surf ramps
-export const OVERBOUNCE_DEFAULT = 1.001; // ordinary geometry clipping
+// TryPlayerMove always clips with overbounce 1: sv_bounce is 0 in CS:GO, so
+// even the airborne first-impact formula 1 + sv_bounce * (1 - friction) is 1.
+export const OVERBOUNCE = 1.0;
