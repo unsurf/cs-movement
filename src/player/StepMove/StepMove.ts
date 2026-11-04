@@ -6,6 +6,7 @@
  */
 import { STANDABLE_NORMAL } from '../../constants.js';
 import { copy, set, vec3 } from '../../math/vec3.js';
+import { DIST_EPSILON } from '../../physics/Collision/Collision.config.js';
 import type { MovementContext } from '../MovementContext.js';
 import { tryPlayerMove } from '../TryPlayerMove/TryPlayerMove.js';
 import { STEP_HEIGHT } from './StepMove.config.js';
@@ -19,6 +20,7 @@ const downVel = vec3();
 /**
  * Source's StepMove: run the move directly, then again with an 18-unit
  * step-up first; keep whichever version travelled farther horizontally.
+ * Both the step up and the step back down reach STEP_HEIGHT + DIST_EPSILON.
  */
 export function stepMove(ctx: MovementContext, dt: number): void {
   copy(startOrigin, ctx.origin);
@@ -34,7 +36,7 @@ export function stepMove(ctx: MovementContext, dt: number): void {
   copy(ctx.velocity, startVel);
   let tr = ctx.world.trace(
     ctx.origin,
-    set(ctx.tmpA, ctx.origin.x, ctx.origin.y + STEP_HEIGHT, ctx.origin.z),
+    set(ctx.tmpA, ctx.origin.x, ctx.origin.y + STEP_HEIGHT + DIST_EPSILON, ctx.origin.z),
     ctx.mins,
     ctx.maxs,
     ctx.traceResult,
@@ -45,17 +47,20 @@ export function stepMove(ctx: MovementContext, dt: number): void {
 
   tr = ctx.world.trace(
     ctx.origin,
-    set(ctx.tmpA, ctx.origin.x, ctx.origin.y - STEP_HEIGHT, ctx.origin.z),
+    set(ctx.tmpA, ctx.origin.x, ctx.origin.y - STEP_HEIGHT - DIST_EPSILON, ctx.origin.z),
     ctx.mins,
     ctx.maxs,
     ctx.traceResult,
   );
-  const steppedOntoSteep = tr.fraction < 1 && tr.normal !== null && tr.normal.y < STANDABLE_NORMAL;
-  if (!tr.startSolid && !tr.allSolid && !steppedOntoSteep) {
+  // Landing on nothing, or on something too steep to stand on, means the
+  // stepped path isn't a real step: keep the direct attempt. (Source tests
+  // plane.normal.z < 0.7, which is also true for a trace that hit nothing.)
+  const noFooting = tr.normal === null || tr.normal.y < STANDABLE_NORMAL;
+  if (!tr.startSolid && !tr.allSolid && !noFooting) {
     copy(ctx.origin, tr.endPos);
   }
 
-  if (steppedOntoSteep) {
+  if (noFooting) {
     copy(ctx.origin, downOrigin);
     copy(ctx.velocity, downVel);
     return;
