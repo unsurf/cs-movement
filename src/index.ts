@@ -17,6 +17,7 @@ export * from './physics/Friction/Friction.js';
 export * from './physics/Friction/Friction.config.js';
 export * from './physics/Accelerate/Accelerate.js';
 export * from './physics/Accelerate/Accelerate.config.js';
+export type { AccelerateModifiers } from './physics/Accelerate/Accelerate.types.js';
 export * from './physics/AirAccelerate/AirAccelerate.js';
 export * from './physics/AirAccelerate/AirAccelerate.config.js';
 export * from './physics/ClipVelocity/ClipVelocity.js';

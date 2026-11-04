@@ -9,7 +9,7 @@ import { accelerate } from '../../physics/Accelerate/Accelerate.js';
 import { ACCELERATE } from '../../physics/Accelerate/Accelerate.config.js';
 import { applyFriction } from '../../physics/Friction/Friction.js';
 import { FRICTION, STOP_SPEED } from '../../physics/Friction/Friction.config.js';
-import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
+import { accelerateModifiers, currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
 import { stayOnGround } from '../StayOnGround/StayOnGround.js';
 import { stepMove } from '../StepMove/StepMove.js';
@@ -21,7 +21,7 @@ export function walkMove(ctx: MovementContext, dt: number): void {
   applyFriction(ctx.velocity, FRICTION, STOP_SPEED, dt);
 
   const wishspeed = computeWish(ctx);
-  accelerate(ctx.velocity, ctx.wishDir, wishspeed, ACCELERATE, dt);
+  accelerate(ctx.velocity, ctx.wishDir, wishspeed, ACCELERATE, dt, accelerateModifiers(ctx));
   ctx.velocity.y = 0;
 
   // "nopre": air-strafe/prestrafe gain (AirMove.ts) is left completely free —
