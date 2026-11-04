@@ -25,6 +25,7 @@ import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck
 import { DUCK_LERP_TIME, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
 import { checkJump } from './Jump/Jump.js';
+import { checkVelocity } from './CheckVelocity/CheckVelocity.js';
 import { walkMove } from './WalkMove/WalkMove.js';
 import { airMove } from './AirMove/AirMove.js';
 import { categorizePosition } from './CategorizePosition/CategorizePosition.js';
@@ -285,6 +286,7 @@ export class PlayerController implements MovementContext {
       } else {
         this.onLadder = null;
         checkJump(this);
+        checkVelocity(this.velocity);
         if (this.onGround) {
           walkMove(this, dt);
           this.groundTicksSinceLanding++;
@@ -293,6 +295,7 @@ export class PlayerController implements MovementContext {
           airMove(this, dt);
         }
         categorizePosition(this);
+        checkVelocity(this.velocity);
       }
     }
 
