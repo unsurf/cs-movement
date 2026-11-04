@@ -22,7 +22,7 @@ import type { Settings } from '../settings/Settings.js';
 
 import { type InputState, type MovementContext } from './MovementContext.js';
 import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck/Duck.js';
-import { DUCK_LERP_TIME, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
+import { DUCK_SPEED_IDEAL, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
 import { checkJump } from './Jump/Jump.js';
 import { checkVelocity } from './CheckVelocity/CheckVelocity.js';
@@ -56,7 +56,16 @@ export class PlayerController implements MovementContext {
   surfaceFriction = 1;
   groundNormal = vec3(0, 1, 0);
   ducked = false;
-  duckFrac = 0; // 0 standing, 1 ducked (drives eye lerp)
+  ducking = false;
+  duckFlag = false;
+  duckHeld = false;
+  duckFrac = 0; // m_flDuckAmount: 0 standing, 1 ducked (drives eye height)
+  duckSpeed = DUCK_SPEED_IDEAL;
+  rawDuckPrev = false;
+  lastDuckTime = Number.NEGATIVE_INFINITY;
+  fullDuckX = 0;
+  fullDuckZ = 0;
+  time = 0;
   onLadder: LadderVolume | null = null;
 
   /** True while standing on a surf-steep slope (airborne rules, no friction). */
@@ -154,7 +163,9 @@ export class PlayerController implements MovementContext {
   }
 
   get eyeHeight(): number {
-    return EYE_STAND + (EYE_DUCK - EYE_STAND) * this.duckFrac;
+    // SetDuckedEyeOffset eases the view height with SimpleSpline.
+    const t = this.duckFrac;
+    return EYE_STAND + (EYE_DUCK - EYE_STAND) * (3 * t * t - 2 * t * t * t);
   }
 
   get horizontalSpeed(): number {
@@ -249,6 +260,13 @@ export class PlayerController implements MovementContext {
     this.surfaceFriction = 1;
     this.onLadder = null;
     this.ducked = false;
+    this.ducking = false;
+    this.duckFlag = false;
+    this.duckHeld = false;
+    this.duckFrac = 0;
+    this.duckSpeed = DUCK_SPEED_IDEAL;
+    this.rawDuckPrev = false;
+    this.lastDuckTime = Number.NEGATIVE_INFINITY;
     this.stamina = 0;
     this.groundTicksSinceLanding = 0;
     this.hasJumpedBefore = false;
@@ -277,7 +295,8 @@ export class PlayerController implements MovementContext {
     }
 
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
-    updateDuck(this);
+    this.time += dt;
+    updateDuck(this, dt);
     if (this.settings.stamina.enabled) {
       this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, this.settings.stamina.max, dt);
     }
@@ -318,11 +337,6 @@ export class PlayerController implements MovementContext {
     this.landPunch *= Math.max(0, 1 - 10 * dt);
     this.oldJump = this.input.jump;
     this.recordTick();
-
-    // Duck eye-height lerp.
-    const target = this.ducked ? 1 : 0;
-    const rate = dt / DUCK_LERP_TIME;
-    this.duckFrac += Math.sign(target - this.duckFrac) * Math.min(rate, Math.abs(target - this.duckFrac));
 
     copy(this.currPos, this.origin);
     this.currEye = this.eyeHeight;

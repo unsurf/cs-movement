@@ -64,7 +64,7 @@ export function checkJump(ctx: MovementContext, dt: number): void {
   // StartGravity already took off. Then the second half is applied right
   // here (FinishGravity), before the move — a standing jump therefore moves
   // with jump - g*dt on its first tick, not jump - g*dt/2.
-  if (ctx.ducked) ctx.velocity.y = jumpVelocity;
+  if (ctx.ducking || ctx.duckFlag || ctx.ducked) ctx.velocity.y = jumpVelocity;
   else ctx.velocity.y += jumpVelocity;
   finishGravity(ctx, dt);
   ctx.onGround = false;

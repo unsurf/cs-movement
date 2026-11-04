@@ -46,8 +46,18 @@ export interface MovementContext {
   /** player->m_surfaceFriction: scales air acceleration; 0.25 while rising without ground (see CategorizePosition). */
   surfaceFriction: number;
   groundNormal: Vec3;
-  ducked: boolean;
-  duckFrac: number; // 0 standing, 1 ducked (drives eye lerp)
+  ducked: boolean; // m_bDucked: fully ducked, hull is the ducked hull
+  ducking: boolean; // m_bDucking: duck/unduck transition in progress
+  duckFlag: boolean; // FL_DUCKING: set when fully ducked, cleared early in the unduck
+  duckHeld: boolean; // IN_DUCK after the anti-spam filter
+  duckFrac: number; // m_flDuckAmount: 0 standing, 1 ducked
+  duckSpeed: number; // m_flDuckSpeed: spam-penalised duck rate
+  rawDuckPrev: boolean; // last tick's raw duck key (spam penalty edge detect)
+  lastDuckTime: number; // m_flLastDuckTime: ctx.time when a duck last finished
+  fullDuckX: number; // m_vecLastPositionAtFullCrouchSpeed
+  fullDuckZ: number;
+  /** Simulated seconds since spawn (gpGlobals->curtime). */
+  time: number;
   onLadder: LadderVolume | null;
   /** True while standing on a surf-steep slope (airborne rules, no friction). */
   surfing: boolean;

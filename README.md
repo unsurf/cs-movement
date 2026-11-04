@@ -84,11 +84,11 @@ world.ladders.push({
 | `origin`, `velocity` | Position and velocity (Source units/sec) |
 | `yaw`, `pitch` | View angles in degrees |
 | `onGround`, `groundNormal` | Grounded state + surface normal |
-| `ducked`, `duckFrac` | Duck state and 0→1 eye-height lerp |
+| `ducked`, `ducking`, `duckFrac` | `ducked` = ducked hull is active; `ducking` = duck/unduck transition in progress; `duckFrac` = CS's `m_flDuckAmount`, 0→1 (drives eye height and the speed crop) |
 | `surfing` | True on steep-but-surfable slopes |
 | `onLadder` | Current `LadderVolume` or `null` |
 | `horizontalSpeed` | `length2D(velocity)` — the HUD number |
-| `eyeHeight` | Lerped eye height for current duck state |
+| `eyeHeight` | Eye height for the current duck amount (eased like CS's `SetDuckedEyeOffset`) |
 | `stamina` | Fatigue pool (only when `settings.stamina.enabled`) |
 | `lastHopQuality` | `'perfect'` / `'normal'` / `null` (only when `settings.perf.enabled`) |
 

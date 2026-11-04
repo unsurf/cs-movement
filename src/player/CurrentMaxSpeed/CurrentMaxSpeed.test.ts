@@ -26,7 +26,8 @@ describe('currentMaxSpeed walk handling (CheckParameters)', () => {
     const p = player();
     p.input.walk = true;
     p.ducked = true;
-    expect(currentMaxSpeed(p)).toBe(DEFAULT_SETTINGS.crouchSpeed);
+    p.duckFrac = 1;
+    expect(currentMaxSpeed(p)).toBeCloseTo(DEFAULT_SETTINGS.crouchSpeed, 6);
     expect(accelerateModifiers(p).walking).toBe(false);
   });
 
