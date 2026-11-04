@@ -7,7 +7,7 @@
 import { DEFAULT_SETTINGS } from './Settings.config.js';
 import type { Settings } from './Settings.types.js';
 
-export type { CrosshairSettings, StaminaSettings, PerfSettings, Settings } from './Settings.types.js';
+export type { CrosshairSettings, StaminaSettings, PerfSettings, PhysicsSettings, Settings } from './Settings.types.js';
 export { DEFAULT_SETTINGS } from './Settings.config.js';
 
 // v2: defaults moved to nopre-KZ tuning (airaccelerate 100, takeoff clamp).
@@ -29,6 +29,7 @@ export function loadSettings(): Settings {
       // The pre-CS stamina model stored fractions and a `maxPenalty`; its numbers mean something else now.
       stamina: { ...DEFAULT_SETTINGS.stamina, ...(isLegacyStamina(parsed.stamina) ? {} : (parsed.stamina ?? {})) },
       perf: { ...DEFAULT_SETTINGS.perf, ...(parsed.perf ?? {}) },
+      physics: { ...DEFAULT_SETTINGS.physics, ...(parsed.physics ?? {}) },
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);

@@ -24,11 +24,14 @@ export * from './physics/ClipVelocity/ClipVelocity.js';
 export * from './physics/ClipVelocity/ClipVelocity.config.js';
 export * from './physics/Stamina/Stamina.js';
 export * from './physics/PerfBonus/PerfBonus.js';
+export * from './physics/PhysicsSettings/PhysicsSettings.config.js';
+export type { PhysicsSettings } from './physics/PhysicsSettings/PhysicsSettings.types.js';
 export * from './physics/Collision/Collision.js';
 export * from './physics/Collision/Collision.config.js';
 export * from './physics/World/World.js';
 
 export * from './settings/Settings.js';
+export * from './settings/Presets/Presets.js';
 
 export * from './player/Jump/Jump.config.js';
 export * from './player/Duck/Duck.config.js';

@@ -9,6 +9,7 @@ import { M_YAW } from '../player/MouseInput/MouseInput.config.js';
 import { AIR_ACCELERATE } from '../physics/AirAccelerate/AirAccelerate.config.js';
 import { DEFAULT_STAMINA_SETTINGS } from '../physics/Stamina/Stamina.config.js';
 import { DEFAULT_PERF_SETTINGS } from '../physics/PerfBonus/PerfBonus.config.js';
+import { DEFAULT_PHYSICS_SETTINGS } from '../physics/PhysicsSettings/PhysicsSettings.config.js';
 import type { Settings } from './Settings.types.js';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -38,4 +39,5 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   stamina: { ...DEFAULT_STAMINA_SETTINGS },
   perf: { ...DEFAULT_PERF_SETTINGS },
+  physics: { ...DEFAULT_PHYSICS_SETTINGS },
 };

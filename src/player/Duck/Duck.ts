@@ -22,7 +22,6 @@ import {
   HULL_DUCK_HEIGHT,
   HULL_HALF_WIDTH,
   HULL_STAND_HEIGHT,
-  TIME_BETWEEN_DUCKS,
   UNDUCK_FLAG_AMOUNT,
   UNDUCK_SPEED_MIN,
 } from './Duck.config.js';
@@ -71,7 +70,7 @@ function approach(target: number, value: number, step: number): number {
 /** Anti duck-spam: ignore the key while the duck speed is spent or right after finishing a duck. */
 function duckingEnabled(ctx: MovementContext): boolean {
   if (ctx.duckSpeed < DUCK_SPEED_MIN_ENABLED) return false;
-  return ctx.duckFlag || ctx.time >= ctx.lastDuckTime + TIME_BETWEEN_DUCKS;
+  return ctx.duckFlag || ctx.time >= ctx.lastDuckTime + ctx.settings.physics.timeBetweenDucks;
 }
 
 function finishDuck(ctx: MovementContext): void {

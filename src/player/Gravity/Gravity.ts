@@ -6,7 +6,6 @@
  */
 // Provenance (cstrike15_src@f82112a, game/shared/gamemovement.cpp): CGameMovement::StartGravity / FinishGravity
 
-import { GRAVITY } from '../../constants.js';
 import { checkVelocity } from '../CheckVelocity/CheckVelocity.js';
 import type { MovementContext } from '../MovementContext.js';
 
@@ -18,12 +17,12 @@ import type { MovementContext } from '../MovementContext.js';
  * makes a ledge walk-off and a standing jump launch with Source's numbers.
  */
 export function startGravity(ctx: MovementContext, dt: number): void {
-  ctx.velocity.y -= 0.5 * GRAVITY * dt;
-  checkVelocity(ctx.velocity);
+  ctx.velocity.y -= 0.5 * ctx.settings.physics.gravity * dt;
+  checkVelocity(ctx.velocity, ctx.settings.physics.maxVelocity);
 }
 
 /** The other half of gravity, applied after the move and categorize. */
 export function finishGravity(ctx: MovementContext, dt: number): void {
-  ctx.velocity.y -= 0.5 * GRAVITY * dt;
-  checkVelocity(ctx.velocity);
+  ctx.velocity.y -= 0.5 * ctx.settings.physics.gravity * dt;
+  checkVelocity(ctx.velocity, ctx.settings.physics.maxVelocity);
 }

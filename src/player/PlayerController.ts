@@ -326,7 +326,7 @@ export class PlayerController implements MovementContext {
           this.velocity.y = 0;
           this.fallVelocity = 0;
         }
-        checkVelocity(this.velocity);
+        checkVelocity(this.velocity, this.settings.physics.maxVelocity);
         if (this.onGround) {
           walkMove(this, dt);
           this.groundTicksSinceLanding++;
@@ -334,7 +334,7 @@ export class PlayerController implements MovementContext {
           airMove(this, dt);
         }
         categorizePosition(this);
-        checkVelocity(this.velocity);
+        checkVelocity(this.velocity, this.settings.physics.maxVelocity);
         finishGravity(this, dt);
         if (this.onGround) this.velocity.y = 0;
       }
