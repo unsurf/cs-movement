@@ -269,3 +269,26 @@ describe('bhopSpeedClamp reference speed (CCSGameMovement::PreventBunnyJumping)'
     expect(walking).toBeCloseTo(275, 0);
   });
 });
+
+describe('jump tick matches FullWalkMove gravity order', () => {
+  // StartGravity (-g*dt/2) -> impulse -> FinishGravity inside the jump
+  // -> move -> categorize -> FinishGravity. Standing ADDS the impulse,
+  // ducking SETS it (CCSGameMovement::CheckJumpButton).
+  function jumpTickVy(duck: boolean): number {
+    const player = new PlayerController(makeWorld(), makeSettings({ autobhop: false }), vec3(0, 0, 0));
+    run(player, 4); // settle on the floor
+    player.input.duck = duck;
+    run(player, 2); // let the duck state take effect while grounded
+    player.input.jump = true;
+    run(player, 1);
+    return player.velocity.y;
+  }
+
+  it('standing jump ends its first tick at impulse - 1.5 g dt', () => {
+    expect(jumpTickVy(false)).toBeCloseTo(JUMP_VELOCITY - 1.5 * GRAVITY * DT, 3);
+  });
+
+  it('ducking jump ends its first tick at impulse - g dt', () => {
+    expect(jumpTickVy(true)).toBeCloseTo(JUMP_VELOCITY - GRAVITY * DT, 3);
+  });
+});

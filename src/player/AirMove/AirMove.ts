@@ -5,7 +5,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { length2D } from '../../math/vec3.js';
-import { GRAVITY } from '../../constants.js';
 import { airAccelerate } from '../../physics/AirAccelerate/AirAccelerate.js';
 import { AIR_SPEED_CEILING_SOFTNESS } from '../../physics/PerfBonus/PerfBonus.config.js';
 import { applyAirSpeedCeiling } from '../../physics/PerfBonus/PerfBonus.js';
@@ -22,9 +21,9 @@ export function airMove(ctx: MovementContext, dt: number): void {
   const wishspeed = computeWish(ctx);
   airAccelerate(ctx.velocity, ctx.wishDir, wishspeed, ctx.settings.airAccelerate, dt);
 
-  ctx.velocity.y -= 0.5 * GRAVITY * dt; // half gravity before the move
+  // Gravity is NOT applied here: Source brackets the whole tick with
+  // StartGravity/FinishGravity (see Gravity.ts and PlayerController.tick).
   tryPlayerMove(ctx, dt);
-  ctx.velocity.y -= 0.5 * GRAVITY * dt; // half gravity after
 
   if (ctx.surfing) {
     // Surfing lets you build as much speed as you want, full stop — and

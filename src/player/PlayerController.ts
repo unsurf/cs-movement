@@ -4,10 +4,10 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-// Per-tick player simulation following Source's CGameMovement pipeline:
-// duck -> ladder -> CheckJumpButton -> Friction/Accelerate (ground) or
-// AirAccelerate (air/surf) -> gravity halves around TryPlayerMove ->
-// CategorizePosition. All state is in Source units, Y-up.
+// Per-tick player simulation following Source's CGameMovement pipeline
+// (cstrike15_src@f82112a): duck -> ladder -> StartGravity -> CheckJumpButton
+// -> Friction/Accelerate (ground) or AirAccelerate (air/surf) + TryPlayerMove
+// -> CategorizePosition -> FinishGravity. All state is in Source units, Y-up.
 //
 // This class IS a MovementContext (see MovementContext.ts) — its fields are
 // passed by reference to each extracted behavior (Jump, WalkMove, ...), so
@@ -26,6 +26,7 @@ import { DUCK_LERP_TIME, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
 import { checkJump } from './Jump/Jump.js';
 import { checkVelocity } from './CheckVelocity/CheckVelocity.js';
+import { finishGravity, startGravity } from './Gravity/Gravity.js';
 import { walkMove } from './WalkMove/WalkMove.js';
 import { airMove } from './AirMove/AirMove.js';
 import { categorizePosition } from './CategorizePosition/CategorizePosition.js';
@@ -285,17 +286,27 @@ export class PlayerController implements MovementContext {
         ladderMove(this, dt, ladder);
       } else {
         this.onLadder = null;
-        checkJump(this);
+        // FullWalkMove order: fall speed is sampled before any gravity, then
+        // half gravity, jump, ground friction/walk or air move, categorize,
+        // the other half gravity, and finally ground zeroes vertical speed.
+        if (!this.onGround) this.fallVelocity = -this.velocity.y;
+        startGravity(this, dt);
+        checkJump(this, dt);
+        if (this.onGround) {
+          this.velocity.y = 0;
+          this.fallVelocity = 0;
+        }
         checkVelocity(this.velocity);
         if (this.onGround) {
           walkMove(this, dt);
           this.groundTicksSinceLanding++;
         } else {
-          this.fallVelocity = -this.velocity.y;
           airMove(this, dt);
         }
         categorizePosition(this);
         checkVelocity(this.velocity);
+        finishGravity(this, dt);
+        if (this.onGround) this.velocity.y = 0;
       }
     }
 

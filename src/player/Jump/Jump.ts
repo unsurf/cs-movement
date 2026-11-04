@@ -5,11 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { length, scale } from '../../math/vec3.js';
+import { finishGravity } from '../Gravity/Gravity.js';
 import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
-export function checkJump(ctx: MovementContext): void {
+export function checkJump(ctx: MovementContext, dt: number): void {
   if (!ctx.onGround) return;
   if (!ctx.input.jump) return;
   // Vanilla behavior: the press must happen on the ground — holding jump
@@ -58,7 +59,14 @@ export function checkJump(ctx: MovementContext): void {
     jumpVelocity *= staminaPenaltyMultiplier(ctx.stamina, ctx.settings.stamina.max, ctx.settings.stamina.maxPenalty);
     ctx.stamina = addStamina(ctx.stamina, ctx.settings.stamina.jumpCost, ctx.settings.stamina.max);
   }
-  ctx.velocity.y = jumpVelocity;
+  // CCSGameMovement::CheckJumpButton: a ducking jump SETS vertical velocity;
+  // a standing one ADDS to it, so it keeps the half-tick of gravity that
+  // StartGravity already took off. Then the second half is applied right
+  // here (FinishGravity), before the move — a standing jump therefore moves
+  // with jump - g*dt on its first tick, not jump - g*dt/2.
+  if (ctx.ducked) ctx.velocity.y = jumpVelocity;
+  else ctx.velocity.y += jumpVelocity;
+  finishGravity(ctx, dt);
   ctx.onGround = false;
   ctx.hasJumpedBefore = true;
   // Starting a brand-new flight either way — any surf touch from before
