@@ -110,6 +110,7 @@ export class PlayerController implements MovementContext {
   // codebase drive it directly (player.input.jump = true) without binding.
   private inputBound = false;
   ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
+  ladderJumpAllowedAt = 0;
   fallVelocity = 0;
   groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
   // Gravity settling you onto the ground you spawned on isn't a jump landing
@@ -259,6 +260,7 @@ export class PlayerController implements MovementContext {
     this.onGround = false;
     this.surfaceFriction = 1;
     this.onLadder = null;
+    this.ladderJumpAllowedAt = 0;
     this.ducked = false;
     this.ducking = false;
     this.duckFlag = false;
@@ -303,9 +305,10 @@ export class PlayerController implements MovementContext {
 
     if (!checkStuck(this)) {
       const ladder = checkLadder(this);
-      if (ladder) {
-        ladderMove(this, dt, ladder);
-      } else {
+      // A jump-off hands the rest of the tick to the walk/air move below,
+      // like Source switching movetype to WALK inside LadderMove.
+      const stillOnLadder = ladder !== null && ladderMove(this, dt, ladder);
+      if (!stillOnLadder) {
         this.onLadder = null;
         // FullWalkMove order: fall speed is sampled before any gravity, then
         // half gravity, jump, ground friction/walk or air move, categorize,

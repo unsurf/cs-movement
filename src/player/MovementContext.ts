@@ -79,6 +79,7 @@ export interface MovementContext {
 
   oldJump: boolean; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off
+  ladderJumpAllowedAt: number; // ctx.time before which jump is ignored after grabbing a ladder
   fallVelocity: number;
   groundTicksSinceLanding: number; // ground-friction ticks elapsed since landing
   /** True once a real jump (via checkJump) has ever launched this life — gates the perfect-bhop carry. */

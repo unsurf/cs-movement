@@ -8,6 +8,7 @@ import { World } from '../../physics/World/World';
 import { brushFromAABB } from '../../physics/Collision/Collision';
 import type { LadderVolume } from '../../physics/Collision/Collision.types';
 import { PlayerController } from '../PlayerController';
+import { LADDER_IGNORE_JUMP_TIME, LADDER_SCALE_SPEED, LADDER_SLOW_CLIMB_MODIFIER, LADDER_SPEED } from './Ladder.config';
 import { DEFAULT_SETTINGS } from '../../settings/Settings';
 import type { Settings } from '../../settings/Settings';
 
@@ -69,3 +70,39 @@ describe('ladders', () => {
     expect(player.velocity.x).toBeLessThan(-200); // pushed off toward -x
   });
 });
+
+describe('ladders: CS tuning (sv_ladder_scale_speed, ClimbSpeed, IGNORE_JUMP_TIME)', () => {
+  function climbed(input: Partial<PlayerController['input']>, ticks = 128): number {
+    const player = new PlayerController(ladderWorld(), makeSettings(), vec3(70, 5, 0));
+    player.yaw = -90;
+    player.input.forward = true;
+    Object.assign(player.input, input);
+    for (let i = 0; i < ticks; i++) player.tick(DT);
+    return player.origin.y - 5;
+  }
+
+  it('climbs at 200 * 0.78 u/s', () => {
+    expect(climbed({})).toBeCloseTo(LADDER_SPEED * LADDER_SCALE_SPEED, -1);
+  });
+
+  it('holding walk (or duck) climbs at 0.34x', () => {
+    const full = climbed({});
+    expect(climbed({ walk: true })).toBeCloseTo(full * LADDER_SLOW_CLIMB_MODIFIER, -1);
+  });
+
+  it('ignores a held jump for the first 0.2s after grabbing, then lets go', () => {
+    const player = new PlayerController(ladderWorld(), makeSettings(), vec3(70, 5, 0));
+    player.yaw = -90;
+    player.input.forward = true;
+    for (let i = 0; i < 40 && player.onLadder === null; i++) player.tick(DT);
+    expect(player.onLadder).not.toBeNull();
+    player.input.jump = true;
+    player.input.forward = false;
+    player.tick(DT);
+    expect(player.onLadder).not.toBeNull(); // still inside the grace period
+    const ticks = Math.ceil(LADDER_IGNORE_JUMP_TIME / DT) + 2;
+    for (let i = 0; i < ticks; i++) player.tick(DT);
+    expect(player.onLadder).toBeNull();
+  });
+});
+
