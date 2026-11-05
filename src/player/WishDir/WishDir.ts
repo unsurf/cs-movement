@@ -6,12 +6,13 @@
  */
 import { normalize, set } from '../../math/vec3.js';
 import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
+import { forwardAxis, sideAxis } from '../MoveAxes/MoveAxes.js';
 import { DEG2RAD, type MovementContext } from '../MovementContext.js';
 
-/** Horizontal wish direction from WASD + yaw, written into ctx.wishDir. Returns wishspeed. */
+/** Horizontal wish direction from WASD (or analog axes) + yaw, written into ctx.wishDir. Returns wishspeed. */
 export function computeWish(ctx: MovementContext): number {
-  const fmove = (ctx.input.forward ? 1 : 0) - (ctx.input.back ? 1 : 0);
-  const smove = (ctx.input.right ? 1 : 0) - (ctx.input.left ? 1 : 0);
+  const fmove = forwardAxis(ctx.input);
+  const smove = sideAxis(ctx.input);
   const yawRad = ctx.yaw * DEG2RAD;
   const fx = -Math.sin(yawRad);
   const fz = -Math.cos(yawRad);

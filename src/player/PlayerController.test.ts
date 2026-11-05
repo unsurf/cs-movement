@@ -186,4 +186,54 @@ describe('ramp base', () => {
     expect(player.onGround).toBe(true);
     expect(player.horizontalSpeed).toBeLessThan(100);
   });
+
+  describe('weapon, lock and velocity modifier', () => {
+    it('caps ground speed at the active weapon speed', () => {
+      const player = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+      player.weapon = { maxSpeed: 200, scoped: false };
+      player.input.forward = true;
+      run(player, 512);
+      expect(player.horizontalSpeed).toBeGreaterThan(195);
+      expect(player.horizontalSpeed).toBeLessThanOrEqual(200.001);
+    });
+
+    it('accelerates slower with a slow weapon (sv_accelerate_use_weapon_speed)', () => {
+      const fast = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+      const slow = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+      slow.weapon = { maxSpeed: 150, scoped: false };
+      fast.input.forward = slow.input.forward = true;
+      run(fast, 20);
+      run(slow, 20);
+      expect(slow.horizontalSpeed).toBeLessThan(fast.horizontalSpeed * 0.7);
+    });
+
+    it('ignores movement and jump while canMove is false, then resumes held input', () => {
+      const player = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+      run(player, 64); // settle
+      player.canMove = false;
+      player.input.forward = true;
+      player.input.jump = true;
+      run(player, 64);
+      expect(player.horizontalSpeed).toBe(0);
+      expect(player.onGround).toBe(true);
+      expect(player.input.forward).toBe(true);
+      expect(player.input.jump).toBe(true);
+      player.canMove = true;
+      player.input.jump = false;
+      run(player, 32);
+      expect(player.horizontalSpeed).toBeGreaterThan(50);
+    });
+
+    it('slows the grounded player by velocityModifier and recovers it over 2.5 s', () => {
+      const player = new PlayerController(makeWorld(), makeSettings(), vec3(0, 5, 0));
+      run(player, 64);
+      player.velocityModifier = 0.5;
+      player.input.forward = true;
+      run(player, 64);
+      expect(player.horizontalSpeed).toBeLessThan(250 * 0.75);
+      run(player, 128 * 3);
+      expect(player.velocityModifier).toBe(1);
+      expect(player.horizontalSpeed).toBeGreaterThan(245);
+    });
+  });
 });

@@ -14,6 +14,7 @@
 // tick() is a thin, ordered sequence of calls with no extra allocation.
 
 import { type Vec3, clone, copy, length2D, set, vec3 } from '../math/vec3.js';
+import { MAX_FRAME_TIME } from '../constants.js';
 import { recoverStamina } from '../physics/Stamina/Stamina.js';
 import { createTraceResult } from '../physics/Collision/Collision.js';
 import type { LadderVolume, TraceResult } from '../physics/Collision/Collision.types.js';
@@ -21,6 +22,7 @@ import type { World } from '../physics/World/World.js';
 import type { Settings } from '../settings/Settings.js';
 
 import { type InputState, type MovementContext } from './MovementContext.js';
+import type { WeaponState } from './WeaponState/WeaponState.types.js';
 import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck/Duck.js';
 import { DUCK_SPEED_IDEAL, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
@@ -36,17 +38,35 @@ import { detectBlockedMove } from './BlockedMove/BlockedMove.js';
 import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
 import { ContactLog } from './ContactLog/ContactLog.js';
 import { TickHistory } from './TickHistory/TickHistory.js';
+import type { MovementEvent } from './MovementEvents/MovementEvents.types.js';
+import { restorePlayer, snapshotPlayer } from './PlayerState/PlayerState.js';
+import type { PlayerState } from './PlayerState/PlayerState.types.js';
+import { STEP_EPSILON } from './FixedStep/FixedStep.config.js';
+import type { AdvanceResult, InterpolatedPose } from './FixedStep/FixedStep.types.js';
+
+/** InputState entries that are plain on/off buttons (everything but the analog axes). */
+type KeyAction = Exclude<keyof InputState, 'forwardMove' | 'sideMove'>;
 
 /** Optional host hooks. Movement never logs or touches globals on its own. */
 export interface PlayerOptions {
   /** Called on anomalies (unstuck pops, velocity kills). Default: no-op. */
   log?: (msg: string) => void;
+  /** Called synchronously from tick() for jumps, landings, ladders, ducks and teleports. */
+  onEvent?: (event: MovementEvent) => void;
+}
+
+/** Where teleport() puts the player and what it keeps. Everything else is reset. */
+export interface TeleportOptions {
+  velocity?: Vec3;
+  yaw?: number;
+  pitch?: number;
 }
 
 export class PlayerController implements MovementContext {
   readonly world: World;
   readonly settings: Settings;
   readonly log: (msg: string) => void;
+  private readonly onEvent: ((event: MovementEvent) => void) | undefined;
 
   origin: Vec3;
   velocity = vec3();
@@ -87,6 +107,10 @@ export class PlayerController implements MovementContext {
   /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
   lastHopQuality: 'perfect' | 'normal' | null = null;
 
+  weapon: WeaponState | null = null;
+  velocityModifier = 1;
+  canMove = true;
+
   readonly input: InputState = {
     forward: false,
     back: false,
@@ -96,6 +120,8 @@ export class PlayerController implements MovementContext {
     duck: false,
     walk: false,
     reset: false,
+    forwardMove: null,
+    sideMove: null,
   };
 
   oldJump = false; // was +jump held last tick (Source's pogo-stick check)
@@ -136,11 +162,14 @@ export class PlayerController implements MovementContext {
   // MovementContext — this is PlayerController's own diagnostic API.
   private readonly tickHistory = new TickHistory();
   private readonly spawn: Vec3;
+  /** Unsimulated frame time carried by advance(). */
+  stepAccumulator = 0;
 
   constructor(world: World, settings: Settings, spawn: Vec3, opts: PlayerOptions = {}) {
     this.world = world;
     this.settings = settings;
     this.log = opts.log ?? (() => {});
+    this.onEvent = opts.onEvent;
     this.spawn = clone(spawn);
     this.origin = clone(spawn);
     this.prevPos = clone(spawn);
@@ -178,7 +207,7 @@ export class PlayerController implements MovementContext {
 
   bindInput(target: HTMLElement): void {
     this.inputBound = true;
-    const keyMap: Record<string, keyof InputState | undefined> = {
+    const keyMap: Record<string, KeyAction | undefined> = {
       KeyW: 'forward',
       KeyS: 'back',
       KeyA: 'left',
@@ -253,14 +282,32 @@ export class PlayerController implements MovementContext {
     });
   }
 
-  respawn(): void {
-    copy(this.origin, this.spawn);
-    set(this.velocity, 0, 0, 0);
-    copy(this.prevPos, this.spawn);
-    copy(this.currPos, this.spawn);
+  /** Emit a movement event to the host's onEvent hook, if any. */
+  emit(event: MovementEvent): void {
+    this.onEvent?.(event);
+  }
+
+  /** Move the respawn point used by respawn() / the reset key. */
+  setSpawn(origin: Vec3): void {
+    copy(this.spawn, origin);
+  }
+
+  /**
+   * Put the player at `origin` with a clean movement state (no fall, jump,
+   * duck, ladder, stuck or surf history; velocity as given, default zero).
+   * Simulated time, stamina and the weapon/lock flags are the host's.
+   */
+  teleport(origin: Vec3, opts: TeleportOptions = {}): void {
+    copy(this.origin, origin);
+    if (opts.velocity) copy(this.velocity, opts.velocity);
+    else set(this.velocity, 0, 0, 0);
+    if (opts.yaw !== undefined) this.yaw = opts.yaw;
+    if (opts.pitch !== undefined) this.pitch = opts.pitch;
     this.onGround = false;
     this.surfaceFriction = 1;
+    set(this.groundNormal, 0, 1, 0);
     this.onLadder = null;
+    this.ladderCooldown = 0;
     this.ladderJumpAllowedAt = 0;
     this.ducked = false;
     this.ducking = false;
@@ -270,12 +317,73 @@ export class PlayerController implements MovementContext {
     this.duckSpeed = DUCK_SPEED_IDEAL;
     this.rawDuckPrev = false;
     this.lastDuckTime = Number.NEGATIVE_INFINITY;
-    this.stamina = 0;
+    this.fullDuckX = 0;
+    this.fullDuckZ = 0;
+    this.surfing = false;
+    this.surfedSinceGrounded = false;
+    this.fallVelocity = 0;
     this.groundTicksSinceLanding = 0;
     this.hasJumpedBefore = false;
-    this.surfedSinceGrounded = false;
+    this.oldJump = false;
+    this.landPunch = 0;
+    this.stuckTicks = 0;
+    this.blockedTicks = 0;
     set(this.landingVelocity, 0, 0, 0);
     this.lastHopQuality = null;
+    this.prevEye = this.currEye = this.eyeHeight;
+    copy(this.prevPos, origin);
+    copy(this.currPos, origin);
+    this.emit({ type: 'teleport', time: this.time, origin: clone(origin) });
+  }
+
+  /** Back to the spawn point as a fresh life: teleport plus time, stamina and velocity modifier. */
+  respawn(): void {
+    this.teleport(this.spawn);
+    this.time = 0;
+    this.stamina = 0;
+    this.velocityModifier = 1;
+    this.stepAccumulator = 0;
+  }
+
+  /** Plain-data copy of the whole simulation state, for rollback, replays and checkpoints. */
+  snapshot(): PlayerState {
+    return snapshotPlayer(this);
+  }
+
+  /** Restore a snapshot() taken from a player in the same world. */
+  restore(state: PlayerState): void {
+    restorePlayer(this, state);
+  }
+
+  // -- Fixed timestep -------------------------------------------------------
+
+  /**
+   * Feed a variable frame time; simulates as many fixed 1/tickRate ticks as
+   * fit (frame time clamped to MAX_FRAME_TIME) and keeps the remainder.
+   * Movement is only frame-rate independent when stepped at a fixed dt, so
+   * prefer this over calling tick() with a render delta.
+   */
+  advance(frameDt: number): AdvanceResult {
+    const step = 1 / this.settings.tickRate;
+    this.stepAccumulator += Math.min(Math.max(frameDt, 0), MAX_FRAME_TIME);
+    let ticks = 0;
+    while (this.stepAccumulator + STEP_EPSILON >= step) {
+      this.tick(step);
+      this.stepAccumulator -= step;
+      ticks++;
+    }
+    if (this.stepAccumulator < 0) this.stepAccumulator = 0;
+    return { ticks, alpha: this.stepAccumulator / step };
+  }
+
+  /** Pose lerped between the last two ticks (alpha from advance()). Writes into `out`. */
+  interpolate(alpha: number, out: InterpolatedPose): InterpolatedPose {
+    const a = Math.min(Math.max(alpha, 0), 1);
+    out.x = this.prevPos.x + (this.currPos.x - this.prevPos.x) * a;
+    out.y = this.prevPos.y + (this.currPos.y - this.prevPos.y) * a;
+    out.z = this.prevPos.z + (this.currPos.z - this.prevPos.z) * a;
+    out.eyeHeight = this.prevEye + (this.currEye - this.prevEye) * a;
+    return out;
   }
 
   // -- Simulation -----------------------------------------------------------
@@ -297,6 +405,16 @@ export class PlayerController implements MovementContext {
       this.respawn();
     }
 
+    // CCSGameMovement::PlayerMove: when the player can't move, directional
+    // input and jump are cleared for the tick (the host's flags are restored
+    // at the end, so a released lock resumes whatever is still held).
+    const { forward, back, left, right, jump, forwardMove, sideMove } = this.input;
+    if (!this.canMove) {
+      this.input.forward = this.input.back = this.input.left = this.input.right = false;
+      this.input.jump = false;
+      this.input.forwardMove = this.input.sideMove = null;
+    }
+
     // PlayerMove: shot upward fast enough (jump pad, boost) and you are not on
     // the ground, whatever the last categorize said. Must precede the duck
     // update and the fall-speed sample so they see an airborne player.
@@ -304,16 +422,22 @@ export class PlayerController implements MovementContext {
 
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
     this.time += dt;
+    const wasDucked = this.ducked;
     updateDuck(this, dt);
+    if (this.ducked !== wasDucked) this.emit({ type: this.ducked ? 'duck' : 'unduck', time: this.time });
     if (this.settings.stamina.enabled) {
       this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, dt);
     }
 
     if (!checkStuck(this)) {
+      const hadLadder = this.onLadder !== null;
       const ladder = checkLadder(this);
       // A jump-off hands the rest of the tick to the walk/air move below,
       // like Source switching movetype to WALK inside LadderMove.
       const stillOnLadder = ladder !== null && ladderMove(this, dt, ladder);
+      if (stillOnLadder !== hadLadder) {
+        this.emit({ type: stillOnLadder ? 'ladderEnter' : 'ladderExit', time: this.time });
+      }
       if (!stillOnLadder) {
         this.onLadder = null;
         // FullWalkMove order: fall speed is sampled before any gravity, then
@@ -342,10 +466,27 @@ export class PlayerController implements MovementContext {
 
     detectBlockedMove(this);
 
+    // m_flVelocityModifier recovers while grounded after the move.
+    if (this.onGround && this.velocityModifier < 1) {
+      this.velocityModifier = Math.min(
+        1,
+        this.velocityModifier + dt * this.settings.physics.velocityRecoveryRate,
+      );
+    }
+
     // Landing view punch (render-only, optional).
     this.landPunch *= Math.max(0, 1 - 10 * dt);
     this.oldJump = this.input.jump;
     this.recordTick();
+    if (!this.canMove) {
+      this.input.forward = forward;
+      this.input.back = back;
+      this.input.left = left;
+      this.input.right = right;
+      this.input.jump = jump;
+      this.input.forwardMove = forwardMove;
+      this.input.sideMove = sideMove;
+    }
 
     copy(this.currPos, this.origin);
     this.currEye = this.eyeHeight;

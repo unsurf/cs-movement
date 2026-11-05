@@ -16,6 +16,8 @@ import type { LadderVolume, TraceResult } from '../physics/Collision/Collision.t
 import type { World } from '../physics/World/World.js';
 import type { Settings } from '../settings/Settings.js';
 import type { ContactLog } from './ContactLog/ContactLog.js';
+import type { MovementEvent } from './MovementEvents/MovementEvents.types.js';
+import type { WeaponState } from './WeaponState/WeaponState.types.js';
 
 /** Shared by every behavior that turns ctx.yaw/pitch (degrees) into a direction vector. */
 export const DEG2RAD = Math.PI / 180;
@@ -29,6 +31,13 @@ export interface InputState {
   duck: boolean;
   walk: boolean;
   reset: boolean;
+  /**
+   * Analog forward/back deflection in [-1, 1] (usercmd forwardmove / full
+   * speed). null = use the forward/back keys. Magnitudes below 1 lower wishspeed.
+   */
+  forwardMove: number | null;
+  /** Analog right/left deflection in [-1, 1]; null = use the left/right keys. */
+  sideMove: number | null;
 }
 
 export interface MovementContext {
@@ -36,6 +45,8 @@ export interface MovementContext {
   readonly settings: Settings;
   /** Called on anomalies (unstuck pops, velocity kills). */
   readonly log: (msg: string) => void;
+  /** Report a movement event to the host. */
+  emit(event: MovementEvent): void;
 
   origin: Vec3;
   velocity: Vec3;
@@ -76,6 +87,13 @@ export interface MovementContext {
   lastHopQuality: 'perfect' | 'normal' | null;
 
   readonly input: InputState;
+
+  /** Active weapon's speed data; null = unarmed / knife (settings.runSpeed). */
+  weapon: WeaponState | null;
+  /** m_flVelocityModifier: 0..1 grounded max-speed scale; recovers while grounded. Host lowers it (e.g. on damage). */
+  velocityModifier: number;
+  /** CCSPlayer::CanMove(): false clears directional input and jump for the tick. */
+  canMove: boolean;
 
   oldJump: boolean; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off

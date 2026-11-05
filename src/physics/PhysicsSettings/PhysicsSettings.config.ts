@@ -23,4 +23,6 @@ export const DEFAULT_PHYSICS_SETTINGS: PhysicsSettings = {
   airSpeedCap: AIR_SPEED_CAP,
   ladderScaleSpeed: LADDER_SCALE_SPEED,
   timeBetweenDucks: TIME_BETWEEN_DUCKS,
+  accelerateUseWeaponSpeed: true,
+  velocityRecoveryRate: 1 / 2.5,
 };

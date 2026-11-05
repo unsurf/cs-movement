@@ -110,6 +110,12 @@ export function categorizePosition(ctx: MovementContext): void {
       const { landCost, max } = ctx.settings.stamina;
       ctx.stamina = addStamina(ctx.stamina, landCost * ctx.fallVelocity, max);
     }
+    ctx.emit({
+      type: 'land',
+      time: ctx.time,
+      fallSpeed: ctx.fallVelocity,
+      speed: Math.hypot(ctx.velocity.x, ctx.velocity.z),
+    });
     if (ctx.settings.viewPunch && ctx.fallVelocity > 250) {
       ctx.landPunch = Math.min((ctx.fallVelocity - 250) * 0.012, 10);
     }

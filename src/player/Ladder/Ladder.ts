@@ -9,6 +9,7 @@
 // Attachment differs on purpose: Source traces a 2u hull toward the wish
 // direction for a CONTENTS_LADDER brush; this library uses LadderVolume overlap.
 
+import { forwardAxis, sideAxis } from '../MoveAxes/MoveAxes.js';
 import { cross, dot, normalize, scale, set, vec3 } from '../../math/vec3.js';
 import type { LadderVolume } from '../../physics/Collision/Collision.types.js';
 import { DEG2RAD, type MovementContext } from '../MovementContext.js';
@@ -42,7 +43,7 @@ export function checkLadder(ctx: MovementContext): LadderVolume | null {
   if (!ctx.onGround) return ladder;
   const yawRad = ctx.yaw * DEG2RAD;
   const facingDot = -Math.sin(yawRad) * -ladder.facing.x + -Math.cos(yawRad) * -ladder.facing.z;
-  if (ctx.input.forward && facingDot > 0.3) return ladder;
+  if (forwardAxis(ctx.input) > 0 && facingDot > 0.3) return ladder;
   return null;
 }
 
@@ -81,8 +82,8 @@ export function ladderMove(ctx: MovementContext, dt: number, ladder: LadderVolum
     }
     // Within the grace period jump is simply ignored: velocity carries over.
   } else {
-    const fmove = (ctx.input.forward ? 1 : 0) - (ctx.input.back ? 1 : 0);
-    const smove = (ctx.input.right ? 1 : 0) - (ctx.input.left ? 1 : 0);
+    const fmove = forwardAxis(ctx.input);
+    const smove = sideAxis(ctx.input);
     if (fmove === 0 && smove === 0) {
       set(ctx.velocity, 0, 0, 0);
     } else {
