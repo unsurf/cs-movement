@@ -10,6 +10,7 @@ import type { AccelerateModifiers } from '../../physics/Accelerate/Accelerate.ty
 import { length } from '../../math/vec3.js';
 import { staminaSpeedMultiplier } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
+import { SLOW_SNIPER_WALK_SPEED, WEAPON_SPEED_REFERENCE } from '../WeaponState/WeaponState.config.js';
 import { WALK_CAP_LEEWAY } from './CurrentMaxSpeed.config.js';
 
 /** IN_DUCK || m_bDucking || FL_DUCKING: any duck-related state, including transitions. */
@@ -22,23 +23,40 @@ export function isWalkKeyActive(ctx: MovementContext): boolean {
   return ctx.input.walk && !isDuckingState(ctx);
 }
 
+/** player->m_flMaxspeed: the run speed, lowered to the active weapon's speed when it is slower. */
+export function baseMaxSpeed(ctx: MovementContext): number {
+  const weapon = ctx.weapon;
+  return weapon === null ? ctx.settings.runSpeed : Math.min(ctx.settings.runSpeed, weapon.maxSpeed);
+}
+
+/** CS_PLAYER_SPEED_WALK_MODIFIER: walkSpeed / runSpeed. */
+export function walkModifier(ctx: MovementContext): number {
+  return ctx.settings.walkSpeed / ctx.settings.runSpeed;
+}
+
+/** CS_PLAYER_SPEED_DUCK_MODIFIER: crouchSpeed / runSpeed. */
+export function duckModifier(ctx: MovementContext): number {
+  return ctx.settings.crouchSpeed / ctx.settings.runSpeed;
+}
+
 /**
- * HandleDuckingSpeedCrop: max speed (and the move vector) scale by
- * crouchSpeed/runSpeed lerped by how far into the duck the player is, so
- * the crop eases in and out with the duck amount rather than switching.
+ * HandleDuckingSpeedCrop: max speed (and the move vector) scale by the duck
+ * modifier lerped by how far into the duck the player is, so the crop eases
+ * in and out with the duck amount rather than switching.
  */
 export function duckSpeedModifier(ctx: MovementContext): number {
   if (!isDuckingState(ctx)) return 1;
-  const full = ctx.settings.crouchSpeed / ctx.settings.runSpeed;
-  return full * ctx.duckFrac + 1 - ctx.duckFrac;
+  return duckModifier(ctx) * ctx.duckFrac + 1 - ctx.duckFrac;
 }
 
 export function currentMaxSpeed(ctx: MovementContext): number {
-  let speed: number;
-  if (isWalkKeyActive(ctx) && length(ctx.velocity) < ctx.settings.walkSpeed + WALK_CAP_LEEWAY) {
-    speed = ctx.settings.walkSpeed;
-  } else speed = ctx.settings.runSpeed;
+  let speed = baseMaxSpeed(ctx);
+  const walkSpeed = speed * walkModifier(ctx);
+  if (isWalkKeyActive(ctx) && length(ctx.velocity) < walkSpeed + WALK_CAP_LEEWAY) speed = walkSpeed;
   speed *= duckSpeedModifier(ctx);
+
+  // m_flVelocityModifier only applies to the ground move.
+  if (ctx.onGround) speed *= ctx.velocityModifier;
 
   if (ctx.settings.stamina.enabled) {
     speed *= staminaSpeedMultiplier(ctx.stamina);
@@ -46,16 +64,25 @@ export function currentMaxSpeed(ctx: MovementContext): number {
   return speed;
 }
 
-const modifiers: AccelerateModifiers = { speedFactor: 1, walking: false };
+const modifiers: AccelerateModifiers = {
+  ducking: false,
+  walking: false,
+  duckModifier: 1,
+  walkModifier: 1,
+  weaponFactor: 1,
+  slowSniperScoped: false,
+};
 
-/** CCSGameMovement::Accelerate's duck/walk state, derived from the live context. Reused object. */
+/** CCSGameMovement::Accelerate's duck/walk/weapon state, derived from the live context. Reused object. */
 export function accelerateModifiers(ctx: MovementContext): AccelerateModifiers {
-  const { runSpeed, crouchSpeed, walkSpeed } = ctx.settings;
-  const ducking = isDuckingState(ctx);
-  const walking = isWalkKeyActive(ctx);
-  modifiers.walking = walking;
-  // Unlike the max-speed crop, Accelerate applies the full duck factor as soon
-  // as any duck state is active — it is not eased by the duck amount.
-  modifiers.speedFactor = ducking ? crouchSpeed / runSpeed : walking ? walkSpeed / runSpeed : 1;
+  const weapon = ctx.weapon;
+  const useWeapon = ctx.settings.physics.accelerateUseWeaponSpeed && weapon !== null;
+  modifiers.ducking = isDuckingState(ctx);
+  modifiers.walking = isWalkKeyActive(ctx);
+  modifiers.duckModifier = duckModifier(ctx);
+  modifiers.walkModifier = walkModifier(ctx);
+  modifiers.weaponFactor = useWeapon ? Math.min(1, weapon.maxSpeed / WEAPON_SPEED_REFERENCE) : 1;
+  modifiers.slowSniperScoped =
+    useWeapon && weapon.scoped && weapon.maxSpeed * modifiers.walkModifier < SLOW_SNIPER_WALK_SPEED;
   return modifiers;
 }

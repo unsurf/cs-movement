@@ -16,6 +16,7 @@ import type { LadderVolume, TraceResult } from '../physics/Collision/Collision.t
 import type { World } from '../physics/World/World.js';
 import type { Settings } from '../settings/Settings.js';
 import type { ContactLog } from './ContactLog/ContactLog.js';
+import type { WeaponState } from './WeaponState/WeaponState.types.js';
 
 /** Shared by every behavior that turns ctx.yaw/pitch (degrees) into a direction vector. */
 export const DEG2RAD = Math.PI / 180;
@@ -76,6 +77,13 @@ export interface MovementContext {
   lastHopQuality: 'perfect' | 'normal' | null;
 
   readonly input: InputState;
+
+  /** Active weapon's speed data; null = unarmed / knife (settings.runSpeed). */
+  weapon: WeaponState | null;
+  /** m_flVelocityModifier: 0..1 grounded max-speed scale; recovers while grounded. Host lowers it (e.g. on damage). */
+  velocityModifier: number;
+  /** CCSPlayer::CanMove(): false clears directional input and jump for the tick. */
+  canMove: boolean;
 
   oldJump: boolean; // was +jump held last tick (Source's pogo-stick check)
   ladderCooldown: number; // seconds before ladder can re-grip after jump-off

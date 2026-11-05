@@ -7,6 +7,7 @@
 import { length, scale } from '../../math/vec3.js';
 import { finishGravity } from '../Gravity/Gravity.js';
 import { addStamina, staminaJumpMultiplier } from '../../physics/Stamina/Stamina.js';
+import { baseMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
@@ -26,7 +27,7 @@ export function checkJump(ctx: MovementContext, dt: number): void {
   // (below) can restore more than this, but everything else — a late
   // rejump, autobhop, or a surf-derived landing — is left exactly here.
   if (ctx.settings.bhopSpeedClamp) {
-    const maxScaled = ctx.settings.runSpeed * BHOP_MAX_SPEED_FACTOR;
+    const maxScaled = baseMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;
     const speed = length(ctx.velocity);
     if (speed > maxScaled) {
       scale(ctx.velocity, ctx.velocity, maxScaled / speed);

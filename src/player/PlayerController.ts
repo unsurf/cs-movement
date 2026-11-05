@@ -21,6 +21,7 @@ import type { World } from '../physics/World/World.js';
 import type { Settings } from '../settings/Settings.js';
 
 import { type InputState, type MovementContext } from './MovementContext.js';
+import type { WeaponState } from './WeaponState/WeaponState.types.js';
 import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck/Duck.js';
 import { DUCK_SPEED_IDEAL, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
@@ -86,6 +87,10 @@ export class PlayerController implements MovementContext {
   stamina = 0;
   /** Quality of the most recent takeoff; only set while settings.perf.enabled. */
   lastHopQuality: 'perfect' | 'normal' | null = null;
+
+  weapon: WeaponState | null = null;
+  velocityModifier = 1;
+  canMove = true;
 
   readonly input: InputState = {
     forward: false,
@@ -276,6 +281,7 @@ export class PlayerController implements MovementContext {
     this.surfedSinceGrounded = false;
     set(this.landingVelocity, 0, 0, 0);
     this.lastHopQuality = null;
+    this.velocityModifier = 1;
   }
 
   // -- Simulation -----------------------------------------------------------
@@ -295,6 +301,15 @@ export class PlayerController implements MovementContext {
     if (this.input.reset) {
       this.input.reset = false;
       this.respawn();
+    }
+
+    // CCSGameMovement::PlayerMove: when the player can't move, directional
+    // input and jump are cleared for the tick (the host's flags are restored
+    // at the end, so a released lock resumes whatever is still held).
+    const { forward, back, left, right, jump } = this.input;
+    if (!this.canMove) {
+      this.input.forward = this.input.back = this.input.left = this.input.right = false;
+      this.input.jump = false;
     }
 
     // PlayerMove: shot upward fast enough (jump pad, boost) and you are not on
@@ -342,10 +357,25 @@ export class PlayerController implements MovementContext {
 
     detectBlockedMove(this);
 
+    // m_flVelocityModifier recovers while grounded after the move.
+    if (this.onGround && this.velocityModifier < 1) {
+      this.velocityModifier = Math.min(
+        1,
+        this.velocityModifier + dt * this.settings.physics.velocityRecoveryRate,
+      );
+    }
+
     // Landing view punch (render-only, optional).
     this.landPunch *= Math.max(0, 1 - 10 * dt);
     this.oldJump = this.input.jump;
     this.recordTick();
+    if (!this.canMove) {
+      this.input.forward = forward;
+      this.input.back = back;
+      this.input.left = left;
+      this.input.right = right;
+      this.input.jump = jump;
+    }
 
     copy(this.currPos, this.origin);
     this.currEye = this.eyeHeight;
