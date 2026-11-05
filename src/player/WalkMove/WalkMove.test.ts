@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { vec3 } from '../../math/vec3';
 import { World } from '../../physics/World/World';
 import { brushFromAABB } from '../../physics/Collision/Collision';
+import { STEP_HEIGHT } from '../StepMove/StepMove.config';
 import { PlayerController } from '../PlayerController';
 import { DEFAULT_SETTINGS } from '../../settings/Settings';
 import type { Settings } from '../../settings/Settings';
@@ -41,9 +42,15 @@ function groundTurnPeak(settings: Settings, turnRate: number): number {
 }
 
 describe('noPrestrafe on the ground', () => {
-  it('off: continuous ground-turn strafing can exceed run speed', () => {
-    const peak = groundTurnPeak(makeSettings({ noPrestrafe: false }), 2);
-    expect(peak).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.2);
+  it('off: no ground cap is applied, so landing speed is only bled by friction', () => {
+    // The old version of this test relied on a ground-turn exploit that only
+    // exists at KZ-style sv_accelerate/sv_friction. At the real CS:GO values
+    // (5.5 / 5.2) turning gains little, so check the missing cap directly.
+    const player = new PlayerController(makeWorld(), makeSettings({ noPrestrafe: false }), vec3(0, 5, 0));
+    while (!player.onGround) player.tick(DT);
+    player.velocity.x = 400;
+    player.tick(DT);
+    expect(player.horizontalSpeed).toBeGreaterThan(DEFAULT_SETTINGS.runSpeed * 1.5);
   });
 
   it('on: the same ground-turn strafing never exceeds run speed', () => {
@@ -76,3 +83,33 @@ describe('noPrestrafe on the ground', () => {
     expect(player.horizontalSpeed).toBeLessThanOrEqual(DEFAULT_SETTINGS.runSpeed + 0.01);
   });
 });
+
+describe('walking into geometry', () => {
+  function stairWorld(stepHeight: number): World {
+    const world = makeWorld();
+    // A step across the whole path 100u ahead (player faces -z, the default).
+    world.solids.push(brushFromAABB(vec3(-500, 0, -4000), vec3(500, stepHeight, -100)));
+    return world;
+  }
+
+  function walkIntoStep(stepHeight: number): PlayerController {
+    const player = new PlayerController(stairWorld(stepHeight), makeSettings(), vec3(0, 0.5, 0));
+    player.input.forward = true;
+    for (let i = 0; i < 128; i++) player.tick(DT);
+    return player;
+  }
+
+  it('steps up a ledge no taller than STEP_HEIGHT and keeps walking', () => {
+    const player = walkIntoStep(STEP_HEIGHT - 4);
+    expect(player.origin.z).toBeLessThan(-100);
+    expect(player.origin.y).toBeCloseTo(STEP_HEIGHT - 4, 1);
+    expect(player.onGround).toBe(true);
+  });
+
+  it('is stopped by a ledge taller than STEP_HEIGHT', () => {
+    const player = walkIntoStep(STEP_HEIGHT + 6);
+    expect(player.origin.z).toBeGreaterThan(-100 + 16 - 1);
+    expect(player.origin.y).toBeCloseTo(0, 1);
+  });
+});
+

@@ -4,12 +4,13 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-import { addStamina, staminaPenaltyMultiplier } from '../../physics/Stamina/Stamina.js';
-import { currentMaxSpeed } from '../CurrentMaxSpeed/CurrentMaxSpeed.js';
+import { length, scale } from '../../math/vec3.js';
+import { finishGravity } from '../Gravity/Gravity.js';
+import { addStamina, staminaJumpMultiplier } from '../../physics/Stamina/Stamina.js';
 import type { MovementContext } from '../MovementContext.js';
 import { BHOP_MAX_SPEED_FACTOR, JUMP_VELOCITY } from './Jump.config.js';
 
-export function checkJump(ctx: MovementContext): void {
+export function checkJump(ctx: MovementContext, dt: number): void {
   if (!ctx.onGround) return;
   if (!ctx.input.jump) return;
   // Vanilla behavior: the press must happen on the ground — holding jump
@@ -17,17 +18,18 @@ export function checkJump(ctx: MovementContext): void {
   if (!ctx.settings.autobhop && ctx.oldJump) return;
 
   // sv_enablebunnyhopping 0: clamp takeoff speed to 1.1 × maxspeed
-  // (Source's PreventBunnyJumping), so hops don't compound speed. A
-  // perfect-bhop carry (below) can restore more than this, but everything
-  // else — a late rejump, autobhop, or a surf-derived landing — is left
-  // exactly here.
+  // (CCSGameMovement::PreventBunnyJumping), so hops don't compound speed.
+  // The reference is the player's BASE max speed (player->m_flMaxspeed, i.e.
+  // the weapon speed) — not the duck/walk-cropped mv->m_flMaxSpeed — so
+  // crouch-jumping or walk-jumping still clamps at 1.1 × run speed. The
+  // whole 3D velocity is scaled, exactly like the C++. A perfect-bhop carry
+  // (below) can restore more than this, but everything else — a late
+  // rejump, autobhop, or a surf-derived landing — is left exactly here.
   if (ctx.settings.bhopSpeedClamp) {
-    const maxScaled = currentMaxSpeed(ctx) * BHOP_MAX_SPEED_FACTOR;
-    const speed = ctx.horizontalSpeed;
+    const maxScaled = ctx.settings.runSpeed * BHOP_MAX_SPEED_FACTOR;
+    const speed = length(ctx.velocity);
     if (speed > maxScaled) {
-      const fraction = maxScaled / speed;
-      ctx.velocity.x *= fraction;
-      ctx.velocity.z *= fraction;
+      scale(ctx.velocity, ctx.velocity, maxScaled / speed);
     }
   }
 
@@ -52,12 +54,23 @@ export function checkJump(ctx: MovementContext): void {
     }
   }
 
-  let jumpVelocity = JUMP_VELOCITY;
+  const startY = ctx.velocity.y;
+  // CCSGameMovement::CheckJumpButton: a ducking jump SETS vertical velocity;
+  // a standing one ADDS to it, so it keeps the half-tick of gravity that
+  // StartGravity already took off. Then the second half is applied right
+  // here (FinishGravity), before the move — a standing jump therefore moves
+  // with jump - g*dt on its first tick, not jump - g*dt/2.
+  if (ctx.ducking || ctx.duckFlag || ctx.ducked) ctx.velocity.y = JUMP_VELOCITY;
+  else ctx.velocity.y += JUMP_VELOCITY;
+  // Fatigue scales the whole vertical velocity, using the stamina the player
+  // arrived with (this jump's own cost is added afterwards).
+  if (ctx.settings.stamina.enabled) ctx.velocity.y *= staminaJumpMultiplier(ctx.stamina);
+  finishGravity(ctx, dt);
+  // OnJump: the cost is proportional to the vertical velocity the jump added.
   if (ctx.settings.stamina.enabled) {
-    jumpVelocity *= staminaPenaltyMultiplier(ctx.stamina, ctx.settings.stamina.max, ctx.settings.stamina.maxPenalty);
-    ctx.stamina = addStamina(ctx.stamina, ctx.settings.stamina.jumpCost, ctx.settings.stamina.max);
+    const { jumpCost, max } = ctx.settings.stamina;
+    ctx.stamina = addStamina(ctx.stamina, jumpCost * (ctx.velocity.y - startY), max);
   }
-  ctx.velocity.y = jumpVelocity;
   ctx.onGround = false;
   ctx.hasJumpedBefore = true;
   // Starting a brand-new flight either way — any surf touch from before

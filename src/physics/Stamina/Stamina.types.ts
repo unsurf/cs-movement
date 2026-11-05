@@ -6,19 +6,22 @@
  */
 
 /**
- * CS2-style stamina pool: jumping and landing add fractions of `max`; it
- * recovers over time; while full-ish, both max ground speed and jump
- * velocity are throttled. Valve hasn't published the exact formula this is
- * based on (sv_staminajumpcost / sv_staminalandcost / sv_staminamax), so
- * these are a tunable approximation, not verified game-accurate values.
- * Disabled by default — every existing preset (including "perf" bhop
- * modes) plays with this off, matching servers that zero the costs out.
+ * CS:GO's stamina (CCSGameMovement, cstrike15_src@f82112a). `stamina` is a
+ * fatigue pool in 0..max units; every real jump adds `jumpCost` per u/s of
+ * vertical impulse, every landing adds `landCost` per u/s of fall speed, and
+ * it drains at `recoveryRate` units per second. While it is above zero:
+ *
+ *  - jump velocity is multiplied by (1 - stamina / 100)
+ *  - max speed is multiplied by (1 - stamina / 100)^2
+ *
+ * (the 100 is Valve's STAMINA_RANGE, not `max`, which only caps the pool).
+ * The cvar names are sv_staminajumpcost / sv_staminalandcost /
+ * sv_staminarecoveryrate / sv_staminamax. Disabled by default.
  */
 export interface StaminaSettings {
   enabled: boolean;
-  max: number;
-  jumpCost: number; // fraction of max added per jump
-  landCost: number; // fraction of max added per landing
-  recoveryRate: number; // fraction of max recovered per second
-  maxPenalty: number; // fraction (0..1): speed/jump-velocity cut at a full pool
+  max: number; // sv_staminamax: pool cap, 0..100
+  jumpCost: number; // sv_staminajumpcost: stamina added per u/s of jump impulse
+  landCost: number; // sv_staminalandcost: stamina added per u/s of fall speed on landing
+  recoveryRate: number; // sv_staminarecoveryrate: stamina drained per second
 }

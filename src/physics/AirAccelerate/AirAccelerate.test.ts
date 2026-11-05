@@ -26,4 +26,10 @@ describe('airAccelerate', () => {
     // wishspeed it would be 12 * 30 / 128 = 2.8125 instead.
     expect(vel.x).toBeCloseTo(23.4375, 4);
   });
+
+  it('scales accelspeed by surfaceFriction (m_surfaceFriction)', () => {
+    const vel = vec3();
+    airAccelerate(vel, vec3(1, 0, 0), 250, 12, DT, undefined, 0.25);
+    expect(vel.x).toBeCloseTo(23.4375 * 0.25, 4);
+  });
 });

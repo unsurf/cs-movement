@@ -248,3 +248,47 @@ describe('perf: perfect-bhop velocity carry (opt-in, disabled by default)', () =
     expect(maxSpeed).toBeGreaterThan(settings.perf.maxAirSpeed * 1.3); // uncapped — surf is meant to exceed it
   });
 });
+
+describe('bhopSpeedClamp reference speed (CCSGameMovement::PreventBunnyJumping)', () => {
+  function takeoffSpeed(overrides: Partial<PlayerController['input']>): number {
+    const player = new PlayerController(makeWorld(), makeSettings({ autobhop: false, perf: { enabled: false, maxAirSpeed: 390 } }), vec3(0, 0, 0));
+    run(player, 4); // settle on the floor
+    player.velocity.x = 400;
+    Object.assign(player.input, overrides);
+    player.input.jump = true;
+    run(player, 1);
+    return player.horizontalSpeed;
+  }
+
+  it('clamps to 1.1 x run speed (275), not to the duck/walk-cropped speed', () => {
+    const standing = takeoffSpeed({});
+    const crouched = takeoffSpeed({ duck: true });
+    const walking = takeoffSpeed({ walk: true });
+    expect(standing).toBeCloseTo(275, 0);
+    expect(crouched).toBeCloseTo(275, 0);
+    expect(walking).toBeCloseTo(275, 0);
+  });
+});
+
+describe('jump tick matches FullWalkMove gravity order', () => {
+  // StartGravity (-g*dt/2) -> impulse -> FinishGravity inside the jump
+  // -> move -> categorize -> FinishGravity. Standing ADDS the impulse,
+  // ducking SETS it (CCSGameMovement::CheckJumpButton).
+  function jumpTickVy(duck: boolean): number {
+    const player = new PlayerController(makeWorld(), makeSettings({ autobhop: false }), vec3(0, 0, 0));
+    run(player, 4); // settle on the floor
+    player.input.duck = duck;
+    run(player, 2); // let the duck state take effect while grounded
+    player.input.jump = true;
+    run(player, 1);
+    return player.velocity.y;
+  }
+
+  it('standing jump ends its first tick at impulse - 1.5 g dt', () => {
+    expect(jumpTickVy(false)).toBeCloseTo(JUMP_VELOCITY - 1.5 * GRAVITY * DT, 3);
+  });
+
+  it('ducking jump ends its first tick at impulse - g dt', () => {
+    expect(jumpTickVy(true)).toBeCloseTo(JUMP_VELOCITY - GRAVITY * DT, 3);
+  });
+});

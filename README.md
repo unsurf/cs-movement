@@ -84,12 +84,12 @@ world.ladders.push({
 | `origin`, `velocity` | Position and velocity (Source units/sec) |
 | `yaw`, `pitch` | View angles in degrees |
 | `onGround`, `groundNormal` | Grounded state + surface normal |
-| `ducked`, `duckFrac` | Duck state and 0→1 eye-height lerp |
+| `ducked`, `ducking`, `duckFrac` | `ducked` = ducked hull is active; `ducking` = duck/unduck transition in progress; `duckFrac` = CS's `m_flDuckAmount`, 0→1 (drives eye height and the speed crop) |
 | `surfing` | True on steep-but-surfable slopes |
 | `onLadder` | Current `LadderVolume` or `null` |
 | `horizontalSpeed` | `length2D(velocity)` — the HUD number |
-| `eyeHeight` | Lerped eye height for current duck state |
-| `stamina` | Fatigue pool (only when `settings.stamina.enabled`) |
+| `eyeHeight` | Eye height for the current duck amount (eased like CS's `SetDuckedEyeOffset`) |
+| `stamina` | Fatigue pool in CS units, 0–`settings.stamina.max` (only when `settings.stamina.enabled`) |
 | `lastHopQuality` | `'perfect'` / `'normal'` / `null` (only when `settings.perf.enabled`) |
 
 ### Input
@@ -118,14 +118,14 @@ settings.airAccelerate = 100;   // KZ server default (CS:GO is 12)
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `autobhop` | `true` | Holding jump re-hops every grounded tick |
-| `bhopSpeedClamp` | `true` | Clamps takeoff to 1.1x maxspeed |
+| `bhopSpeedClamp` | `true` | Clamps takeoff to 1.1x `runSpeed` (not the duck/walk-cropped speed) |
 | `noPrestrafe` | `true` | Ground speed ceiling prevents prestrafe carry |
 | `airAccelerate` | `100` | `sv_airaccelerate` — CS:GO default is `12` |
 | `runSpeed` / `walkSpeed` / `crouchSpeed` | `250` / `130` / `85` | Max speeds in units/sec |
 | `sensitivity` | `1.5` | Mouse sensitivity |
 | `mYaw` | `0.022` | Degrees per mouse count |
 | `viewPunch` | `false` | Landing view-punch offset |
-| `stamina` | disabled | CS2-style fatigue pool |
+| `stamina` | disabled | CS:GO's stamina (`sv_stamina*`: max 80, jump 0.08/land 0.05 per u/s, recovery 60/s) |
 | `perf` | disabled | Perfect-bhop velocity carry |
 
 ### Bunnyhopping modes
@@ -170,7 +170,7 @@ Everything is exported from `@unsurf/cs-movement`.
 ### Physics (pure functions)
 
 - `applyFriction`, `accelerate`, `airAccelerate`, `clipVelocity`
-- `addStamina`, `recoverStamina`, `staminaPenaltyMultiplier`
+- `addStamina`, `recoverStamina`, `staminaJumpMultiplier`, `staminaSpeedMultiplier`
 - `applyAirSpeedCeiling`
 
 ### Constants

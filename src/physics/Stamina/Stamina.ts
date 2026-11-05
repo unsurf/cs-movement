@@ -4,27 +4,36 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
+// Provenance (cstrike15_src@f82112a, game/shared/cstrike15/cs_gamemovement.cpp):
+// CCSGameMovement::OnJump / OnLand / ReduceTimers / CheckParameters / CheckJumpButton
+
+import { STAMINA_RANGE } from './Stamina.config.js';
 
 /**
- * Add a stamina cost (jump or landing), clamped to the pool max.
+ * Add stamina (a jump or a landing), clamped to the pool max.
  */
-export function addStamina(current: number, cost: number, max: number): number {
-  return Math.min(max, current + cost);
+export function addStamina(current: number, amount: number, max: number): number {
+  return Math.min(max, Math.max(0, current + amount));
 }
 
 /**
- * Recover stamina toward 0 at `recoveryRate` (fraction of max per second).
+ * Drain stamina toward 0 at `recoveryRate` units per second.
  */
-export function recoverStamina(current: number, recoveryRate: number, max: number, dt: number): number {
-  return Math.max(0, current - recoveryRate * max * dt);
+export function recoverStamina(current: number, recoveryRate: number, dt: number): number {
+  return Math.max(0, current - recoveryRate * dt);
+}
+
+/** Jump-velocity multiplier: 1 - stamina/100, clamped to 0..1. */
+export function staminaJumpMultiplier(stamina: number): number {
+  return Math.min(1, Math.max(0, 1 - stamina / STAMINA_RANGE));
 }
 
 /**
- * How much a full-ish stamina pool throttles max speed / jump velocity:
- * 1.0 at an empty pool, down to `1 - maxPenalty` at a full one.
+ * Max-speed multiplier: the jump multiplier squared, so half-full stamina
+ * costs a quarter of top speed (and quarter jump height) while the jump
+ * itself only loses half its velocity.
  */
-export function staminaPenaltyMultiplier(current: number, max: number, maxPenalty: number): number {
-  if (max <= 0) return 1;
-  const frac = Math.min(1, current / max);
-  return 1 - frac * maxPenalty;
+export function staminaSpeedMultiplier(stamina: number): number {
+  const jump = staminaJumpMultiplier(stamina);
+  return jump * jump;
 }

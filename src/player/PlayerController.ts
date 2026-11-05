@@ -4,10 +4,10 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-// Per-tick player simulation following Source's CGameMovement pipeline:
-// duck -> ladder -> CheckJumpButton -> Friction/Accelerate (ground) or
-// AirAccelerate (air/surf) -> gravity halves around TryPlayerMove ->
-// CategorizePosition. All state is in Source units, Y-up.
+// Per-tick player simulation following Source's CGameMovement pipeline
+// (cstrike15_src@f82112a): duck -> ladder -> StartGravity -> CheckJumpButton
+// -> Friction/Accelerate (ground) or AirAccelerate (air/surf) + TryPlayerMove
+// -> CategorizePosition -> FinishGravity. All state is in Source units, Y-up.
 //
 // This class IS a MovementContext (see MovementContext.ts) — its fields are
 // passed by reference to each extracted behavior (Jump, WalkMove, ...), so
@@ -22,12 +22,15 @@ import type { Settings } from '../settings/Settings.js';
 
 import { type InputState, type MovementContext } from './MovementContext.js';
 import { DUCK_MAXS, DUCK_MINS, STAND_MAXS, STAND_MINS, updateDuck } from './Duck/Duck.js';
-import { DUCK_LERP_TIME, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
+import { DUCK_SPEED_IDEAL, EYE_DUCK, EYE_STAND } from './Duck/Duck.config.js';
 import { checkLadder, ladderMove } from './Ladder/Ladder.js';
 import { checkJump } from './Jump/Jump.js';
+import { checkVelocity } from './CheckVelocity/CheckVelocity.js';
+import { finishGravity, startGravity } from './Gravity/Gravity.js';
 import { walkMove } from './WalkMove/WalkMove.js';
 import { airMove } from './AirMove/AirMove.js';
 import { categorizePosition } from './CategorizePosition/CategorizePosition.js';
+import { START_OF_TICK_LIFTOFF_VELOCITY } from './CategorizePosition/CategorizePosition.config.js';
 import { checkStuck } from './StuckCheck/StuckCheck.js';
 import { detectBlockedMove } from './BlockedMove/BlockedMove.js';
 import { createMouseInputHandlers } from './MouseInput/MouseInput.js';
@@ -51,9 +54,19 @@ export class PlayerController implements MovementContext {
   pitch = 0;
 
   onGround = false;
+  surfaceFriction = 1;
   groundNormal = vec3(0, 1, 0);
   ducked = false;
-  duckFrac = 0; // 0 standing, 1 ducked (drives eye lerp)
+  ducking = false;
+  duckFlag = false;
+  duckHeld = false;
+  duckFrac = 0; // m_flDuckAmount: 0 standing, 1 ducked (drives eye height)
+  duckSpeed = DUCK_SPEED_IDEAL;
+  rawDuckPrev = false;
+  lastDuckTime = Number.NEGATIVE_INFINITY;
+  fullDuckX = 0;
+  fullDuckZ = 0;
+  time = 0;
   onLadder: LadderVolume | null = null;
 
   /** True while standing on a surf-steep slope (airborne rules, no friction). */
@@ -98,6 +111,7 @@ export class PlayerController implements MovementContext {
   // codebase drive it directly (player.input.jump = true) without binding.
   private inputBound = false;
   ladderCooldown = 0; // seconds before ladder can re-grip after jump-off
+  ladderJumpAllowedAt = 0;
   fallVelocity = 0;
   groundTicksSinceLanding = 0; // ground-friction ticks elapsed since landing
   // Gravity settling you onto the ground you spawned on isn't a jump landing
@@ -151,7 +165,9 @@ export class PlayerController implements MovementContext {
   }
 
   get eyeHeight(): number {
-    return EYE_STAND + (EYE_DUCK - EYE_STAND) * this.duckFrac;
+    // SetDuckedEyeOffset eases the view height with SimpleSpline.
+    const t = this.duckFrac;
+    return EYE_STAND + (EYE_DUCK - EYE_STAND) * (3 * t * t - 2 * t * t * t);
   }
 
   get horizontalSpeed(): number {
@@ -243,8 +259,17 @@ export class PlayerController implements MovementContext {
     copy(this.prevPos, this.spawn);
     copy(this.currPos, this.spawn);
     this.onGround = false;
+    this.surfaceFriction = 1;
     this.onLadder = null;
+    this.ladderJumpAllowedAt = 0;
     this.ducked = false;
+    this.ducking = false;
+    this.duckFlag = false;
+    this.duckHeld = false;
+    this.duckFrac = 0;
+    this.duckSpeed = DUCK_SPEED_IDEAL;
+    this.rawDuckPrev = false;
+    this.lastDuckTime = Number.NEGATIVE_INFINITY;
     this.stamina = 0;
     this.groundTicksSinceLanding = 0;
     this.hasJumpedBefore = false;
@@ -272,27 +297,46 @@ export class PlayerController implements MovementContext {
       this.respawn();
     }
 
+    // PlayerMove: shot upward fast enough (jump pad, boost) and you are not on
+    // the ground, whatever the last categorize said. Must precede the duck
+    // update and the fall-speed sample so they see an airborne player.
+    if (this.onGround && this.velocity.y > START_OF_TICK_LIFTOFF_VELOCITY) this.onGround = false;
+
     if (this.ladderCooldown > 0) this.ladderCooldown -= dt;
-    updateDuck(this);
+    this.time += dt;
+    updateDuck(this, dt);
     if (this.settings.stamina.enabled) {
-      this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, this.settings.stamina.max, dt);
+      this.stamina = recoverStamina(this.stamina, this.settings.stamina.recoveryRate, dt);
     }
 
     if (!checkStuck(this)) {
       const ladder = checkLadder(this);
-      if (ladder) {
-        ladderMove(this, dt, ladder);
-      } else {
+      // A jump-off hands the rest of the tick to the walk/air move below,
+      // like Source switching movetype to WALK inside LadderMove.
+      const stillOnLadder = ladder !== null && ladderMove(this, dt, ladder);
+      if (!stillOnLadder) {
         this.onLadder = null;
-        checkJump(this);
+        // FullWalkMove order: fall speed is sampled before any gravity, then
+        // half gravity, jump, ground friction/walk or air move, categorize,
+        // the other half gravity, and finally ground zeroes vertical speed.
+        if (!this.onGround) this.fallVelocity = -this.velocity.y;
+        startGravity(this, dt);
+        checkJump(this, dt);
+        if (this.onGround) {
+          this.velocity.y = 0;
+          this.fallVelocity = 0;
+        }
+        checkVelocity(this.velocity);
         if (this.onGround) {
           walkMove(this, dt);
           this.groundTicksSinceLanding++;
         } else {
-          this.fallVelocity = -this.velocity.y;
           airMove(this, dt);
         }
         categorizePosition(this);
+        checkVelocity(this.velocity);
+        finishGravity(this, dt);
+        if (this.onGround) this.velocity.y = 0;
       }
     }
 
@@ -302,11 +346,6 @@ export class PlayerController implements MovementContext {
     this.landPunch *= Math.max(0, 1 - 10 * dt);
     this.oldJump = this.input.jump;
     this.recordTick();
-
-    // Duck eye-height lerp.
-    const target = this.ducked ? 1 : 0;
-    const rate = dt / DUCK_LERP_TIME;
-    this.duckFrac += Math.sign(target - this.duckFrac) * Math.min(rate, Math.abs(target - this.duckFrac));
 
     copy(this.currPos, this.origin);
     this.currEye = this.eyeHeight;

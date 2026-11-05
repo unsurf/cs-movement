@@ -13,6 +13,10 @@ export { DEFAULT_SETTINGS } from './Settings.config.js';
 // v2: defaults moved to nopre-KZ tuning (airaccelerate 100, takeoff clamp).
 const STORAGE_KEY = 'hns-movement-sandbox.settings.v2';
 
+function isLegacyStamina(stamina: unknown): boolean {
+  return typeof stamina === 'object' && stamina !== null && 'maxPenalty' in stamina;
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -22,7 +26,8 @@ export function loadSettings(): Settings {
       ...structuredClone(DEFAULT_SETTINGS),
       ...parsed,
       crosshair: { ...DEFAULT_SETTINGS.crosshair, ...(parsed.crosshair ?? {}) },
-      stamina: { ...DEFAULT_SETTINGS.stamina, ...(parsed.stamina ?? {}) },
+      // The pre-CS stamina model stored fractions and a `maxPenalty`; its numbers mean something else now.
+      stamina: { ...DEFAULT_SETTINGS.stamina, ...(isLegacyStamina(parsed.stamina) ? {} : (parsed.stamina ?? {})) },
       perf: { ...DEFAULT_SETTINGS.perf, ...(parsed.perf ?? {}) },
     };
   } catch {

@@ -4,7 +4,7 @@
  * Copyright 2026 unsurf
  * SPDX-License-Identifier: Apache-2.0
  */
-// Provenance (Valve source-sdk-2013, game/shared/gamemovement.cpp): CGameMovement::Friction
+// Provenance (cstrike15_src@f82112a, game/shared/gamemovement.cpp): CGameMovement::Friction
 
 import type { Vec3 } from '../../math/vec3.js';
 

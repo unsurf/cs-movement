@@ -28,7 +28,8 @@ export interface Settings {
   /** sv_enablebunnyhopping 0 — clamp takeoff speed to 1.1 × maxspeed. */
   bhopSpeedClamp: boolean;
   /**
-   * "nopre": air-strafe/prestrafe speed gain (see airAccelerate) is left
+   * "nopre" (stock CS:GO behavior; false disables Source's always-on ground
+   * clamp, for bhop-assist style play): air-strafe/prestrafe speed gain (see airAccelerate) is left
    * completely unrestricted — this does NOT cap AirMove. Instead it puts a
    * hard ceiling on GROUND speed at the player's current max speed: land
    * with more than that (from prestrafing, an uncapped bhop chain, a
