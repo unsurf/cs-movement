@@ -22,10 +22,30 @@ world.solids.push(brushFromAABB(vec3(-512, -16, -512), vec3(512, 0, 512)));
 const player = new PlayerController(world, structuredClone(DEFAULT_SETTINGS), vec3(0, 8, 0));
 player.bindInput(canvas);
 
-function gameLoop(dt: number) {
-  player.tick(dt);
-  // read player.origin, player.velocity, player.onGround, etc.
+const pose = { x: 0, y: 0, z: 0, eyeHeight: 0 };
+function frame(frameDt: number) {
+  // Fixed 1/tickRate ticks; movement only matches CS when stepped at a fixed dt.
+  const { alpha } = player.advance(frameDt);
+  player.interpolate(alpha, pose); // render position, lerped between ticks
 }
+```
+
+### State, events and gameplay hooks
+
+```ts
+const player = new PlayerController(world, settings, spawn, {
+  onEvent: (e) => { if (e.type === 'jump') hud.flash(e.quality); }, // jump, land, duck, unduck, ladderEnter/Exit, teleport
+});
+
+const save = player.snapshot();   // plain JSON-safe data: rollback, replays, checkpoints
+player.restore(save);
+player.teleport(origin, { velocity, yaw }); // clean state at a new spot
+player.setSpawn(origin);
+
+player.weapon = { maxSpeed: 200, scoped: false }; // active weapon's speed; null = knife/unarmed
+player.velocityModifier = 0.5;  // m_flVelocityModifier, recovers at 1/2.5 per second on the ground
+player.canMove = false;         // CCSPlayer::CanMove(): clears movement + jump (defusing, freeze time, ...)
+player.input.forwardMove = 0.5; // analog axes in [-1, 1]; null falls back to the keys
 ```
 
 ### Headless (Node / server)

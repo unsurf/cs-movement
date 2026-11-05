@@ -77,4 +77,10 @@ export function checkJump(ctx: MovementContext, dt: number): void {
   // Starting a brand-new flight either way — any surf touch from before
   // this takeoff is no longer relevant to whatever happens next.
   ctx.surfedSinceGrounded = false;
+  ctx.emit({
+    type: 'jump',
+    time: ctx.time,
+    speed: Math.hypot(ctx.velocity.x, ctx.velocity.z),
+    quality: ctx.lastHopQuality,
+  });
 }

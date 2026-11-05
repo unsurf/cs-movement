@@ -16,6 +16,7 @@ import type { LadderVolume, TraceResult } from '../physics/Collision/Collision.t
 import type { World } from '../physics/World/World.js';
 import type { Settings } from '../settings/Settings.js';
 import type { ContactLog } from './ContactLog/ContactLog.js';
+import type { MovementEvent } from './MovementEvents/MovementEvents.types.js';
 import type { WeaponState } from './WeaponState/WeaponState.types.js';
 
 /** Shared by every behavior that turns ctx.yaw/pitch (degrees) into a direction vector. */
@@ -30,6 +31,13 @@ export interface InputState {
   duck: boolean;
   walk: boolean;
   reset: boolean;
+  /**
+   * Analog forward/back deflection in [-1, 1] (usercmd forwardmove / full
+   * speed). null = use the forward/back keys. Magnitudes below 1 lower wishspeed.
+   */
+  forwardMove: number | null;
+  /** Analog right/left deflection in [-1, 1]; null = use the left/right keys. */
+  sideMove: number | null;
 }
 
 export interface MovementContext {
@@ -37,6 +45,8 @@ export interface MovementContext {
   readonly settings: Settings;
   /** Called on anomalies (unstuck pops, velocity kills). */
   readonly log: (msg: string) => void;
+  /** Report a movement event to the host. */
+  emit(event: MovementEvent): void;
 
   origin: Vec3;
   velocity: Vec3;
