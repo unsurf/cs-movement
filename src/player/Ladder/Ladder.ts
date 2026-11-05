@@ -19,7 +19,6 @@ import {
   LADDER_IGNORE_JUMP_TIME,
   LADDER_JUMP_OFF_SPEED,
   LADDER_REGRIP_COOLDOWN,
-  LADDER_SCALE_SPEED,
   LADDER_SLOW_CLIMB_MODIFIER,
   LADDER_SPEED,
 } from './Ladder.config.js';
@@ -140,7 +139,7 @@ export function ladderMove(ctx: MovementContext, dt: number, ladder: LadderVolum
         lateral.y - normalVel * climbDir.y,
         lateral.z - normalVel * climbDir.z,
       );
-      scale(ctx.velocity, ctx.velocity, LADDER_SCALE_SPEED);
+      scale(ctx.velocity, ctx.velocity, ctx.settings.physics.ladderScaleSpeed);
 
       // Standing on the floor and moving away from the ladder: shove off it.
       if (onFloor && normalVel > 0) {

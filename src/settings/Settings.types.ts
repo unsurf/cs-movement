@@ -6,8 +6,9 @@
  */
 import type { StaminaSettings } from '../physics/Stamina/Stamina.types.js';
 import type { PerfSettings } from '../physics/PerfBonus/PerfBonus.types.js';
+import type { PhysicsSettings } from '../physics/PhysicsSettings/PhysicsSettings.types.js';
 
-export type { StaminaSettings, PerfSettings };
+export type { StaminaSettings, PerfSettings, PhysicsSettings };
 
 export interface CrosshairSettings {
   color: string;
@@ -50,4 +51,6 @@ export interface Settings {
   crosshair: CrosshairSettings;
   stamina: StaminaSettings;
   perf: PerfSettings;
+  /** Server cvars (accelerate, friction, gravity, ...). See the presets for known server setups. */
+  physics: PhysicsSettings;
 }

@@ -25,7 +25,7 @@ export function airMove(ctx: MovementContext, dt: number): void {
     wishspeed,
     ctx.settings.airAccelerate,
     dt,
-    undefined,
+    ctx.settings.physics.airSpeedCap,
     ctx.surfaceFriction,
   );
 

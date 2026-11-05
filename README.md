@@ -128,6 +128,29 @@ settings.airAccelerate = 100;   // KZ server default (CS:GO is 12)
 | `stamina` | disabled | CS:GO's stamina (`sv_stamina*`: max 80, jump 0.08/land 0.05 per u/s, recovery 60/s) |
 | `perf` | disabled | Perfect-bhop velocity carry |
 
+### Presets
+
+Known server setups, applied on top of any `Settings` object. Only movement settings change; sensitivity, FOV, crosshair and HUD options carry over.
+
+```ts
+import { DEFAULT_SETTINGS, applyPreset, PRESETS } from '@unsurf/cs-movement';
+
+const settings = applyPreset(DEFAULT_SETTINGS, 'kz');
+console.log(PRESETS.kz.source); // where the numbers come from
+```
+
+| Preset | Air accel | Hopping | Source of the numbers |
+| --- | --- | --- | --- |
+| `vanilla` | 12 | takeoff clamp, no autobhop, stamina on | GOKZ `gokz-mode-vanilla.sp` (stock CS:GO) |
+| `kz` | 100 | uncapped, stamina off | GOKZ `gokz-mode-simplekz.sp` |
+| `kzTimer` | 100 | uncapped, stamina off, friction 5.0, maxvelocity 2000 | GOKZ `gokz-mode-kztimer.sp` |
+| `surf` | 150 | uncapped, stamina off, accelerate 10 | community surf guides |
+| `bhop` | 1000 | uncapped, autobhop | community bhop-server convention |
+| `hnsNopre` | 100 | takeoff clamp, ground clamp, perfect-bhop carry | library calibration, **unverified** |
+| `hnsPre` | 100 | takeoff clamp, ground clamp lifted | library calibration, **unverified** |
+
+The server cvars behind them live on `settings.physics` (`accelerate`, `friction`, `stopSpeed`, `gravity`, `maxVelocity`, `airSpeedCap`, `ladderScaleSpeed`, `timeBetweenDucks`). HNS servers are plugin-driven and no authoritative cvar list exists, so treat those two as starting points. GOKZ modes also add their own mechanics (landing-tick tweaks, custom max-speed hooks) that this library doesn't model.
+
 ### Bunnyhopping modes
 
 | `autobhop` | `bhopSpeedClamp` | Behavior |
